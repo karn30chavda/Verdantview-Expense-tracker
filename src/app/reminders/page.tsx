@@ -56,7 +56,6 @@ export default function RemindersPage() {
     setNotificationPermission(permission);
     if (permission === 'granted') {
       toast({ title: 'Notifications enabled!' });
-      new Notification('VerdantView notifications are active.');
     } else {
       toast({ title: 'Notifications were not enabled.', variant: 'destructive' });
     }

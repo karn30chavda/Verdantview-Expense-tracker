@@ -83,7 +83,7 @@ async function performDBOperation<T>(storeName: string, mode: IDBTransactionMode
 
 // Expenses
 export const getExpenses = (): Promise<Expense[]> => performDBOperation('expenses', 'readonly', store => store.getAll());
-export const addExpense = (expense: Expense): Promise<IDBValidKey> => performDBOperation('expenses', 'readwrite', store => store.add(expense));
+export const addExpense = (expense: Omit<Expense, 'id'>): Promise<IDBValidKey> => performDBOperation('expenses', 'readwrite', store => store.add(expense));
 export const updateExpense = (expense: Expense): Promise<IDBValidKey> => performDBOperation('expenses', 'readwrite', store => store.put(expense));
 export const deleteExpense = (id: number): Promise<void> => performDBOperation('expenses', 'readwrite', store => store.delete(id));
 
@@ -94,7 +94,7 @@ export const deleteCategory = (id: number): Promise<void> => performDBOperation(
 
 // Reminders
 export const getReminders = (): Promise<Reminder[]> => performDBOperation('reminders', 'readonly', store => store.getAll());
-export const addReminder = (reminder: Reminder): Promise<IDBValidKey> => performDBOperation('reminders', 'readwrite', store => store.add(reminder));
+export const addReminder = (reminder: Omit<Reminder, 'id'>): Promise<IDBValidKey> => performDBOperation('reminders', 'readwrite', store => store.add(reminder));
 export const deleteReminder = (id: number): Promise<void> => performDBOperation('reminders', 'readwrite', store => store.delete(id));
 
 // Settings

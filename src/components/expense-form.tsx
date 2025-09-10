@@ -68,7 +68,7 @@ export function ExpenseForm({ expense }: ExpenseFormProps) {
     async function fetchCategories() {
       const fetchedCategories = await getCategories();
       setCategories(fetchedCategories);
-      if (!expense && fetchedCategories.length > 0) {
+      if (!expense?.category && fetchedCategories.length > 0 && !form.getValues('category')) {
         form.setValue('category', fetchedCategories[0].name);
       }
     }
@@ -78,16 +78,19 @@ export function ExpenseForm({ expense }: ExpenseFormProps) {
   async function onSubmit(values: z.infer<typeof formSchema>) {
     setIsSubmitting(true);
     try {
-      const expenseData: Expense = {
-        ...values,
-        id: expense?.id,
-        date: values.date.toISOString(),
-      };
-      
       if (expense) {
+        const expenseData: Expense = {
+            ...values,
+            id: expense.id,
+            date: values.date.toISOString(),
+        };
         await updateExpense(expenseData);
         toast({ title: "Expense updated successfully!" });
       } else {
+        const expenseData: Omit<Expense, 'id'> = {
+            ...values,
+            date: values.date.toISOString(),
+        };
         await addExpense(expenseData);
         toast({ title: "Expense added successfully!" });
       }
@@ -181,7 +184,7 @@ export function ExpenseForm({ expense }: ExpenseFormProps) {
             render={({ field }) => (
               <FormItem>
                 <FormLabel>Category</FormLabel>
-                <Select onValueChange={field.onChange} defaultValue={field.value}>
+                <Select onValueChange={field.onChange} value={field.value} defaultValue={field.value}>
                   <FormControl>
                     <SelectTrigger>
                       <SelectValue placeholder="Select a category" />

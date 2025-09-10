@@ -1,10 +1,11 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
-import { getExpenses, getReminders, getSettings } from '@/lib/db';
-import type { Expense, Reminder, AppSettings } from '@/lib/types';
+import { getExpenses, getReminders, getSettings, getCategories } from '@/lib/db';
+import type { Expense, Reminder, AppSettings, Category } from '@/lib/types';
 import { isWithinInterval, startOfWeek, endOfWeek, startOfMonth, endOfMonth, startOfYear, endOfYear, isToday } from 'date-fns';
 
 export function useExpenses() {
   const [expenses, setExpenses] = useState<Expense[]>([]);
+  const [categories, setCategories] = useState<Category[]>([]);
   const [reminders, setReminders] = useState<Reminder[]>([]);
   const [settings, setSettings] = useState<AppSettings | null>(null);
   const [loading, setLoading] = useState(true);
@@ -14,12 +15,14 @@ export function useExpenses() {
     try {
       setLoading(true);
       setError(null);
-      const [fetchedExpenses, fetchedReminders, fetchedSettings] = await Promise.all([
+      const [fetchedExpenses, fetchedCategories, fetchedReminders, fetchedSettings] = await Promise.all([
         getExpenses(),
+        getCategories(),
         getReminders(),
         getSettings(),
       ]);
       setExpenses(fetchedExpenses.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()));
+      setCategories(fetchedCategories);
       setReminders(fetchedReminders);
       setSettings(fetchedSettings);
     } catch (err: any) {
@@ -50,5 +53,5 @@ export function useExpenses() {
     };
   }, [expenses]);
 
-  return { expenses, reminders, settings, summaries, loading, error, refresh: fetchData };
+  return { expenses, categories, reminders, settings, summaries, loading, error, refresh: fetchData };
 }

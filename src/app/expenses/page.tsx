@@ -294,7 +294,7 @@ export default function ExpensesPage() {
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">All Categories</SelectItem>
-              {categories.map((cat) => (
+              {categories && categories.map((cat) => (
                 <SelectItem key={cat.id} value={cat.name}>
                   {cat.name}
                 </SelectItem>

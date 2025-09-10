@@ -162,6 +162,7 @@ export default function ExpenseScanner() {
                 amount: result.amount,
                 date: result.date ? new Date(result.date).toISOString() : new Date().toISOString(),
                 category: categoryExists ? result.category : 'Other',
+                paymentMode: result.paymentMode,
             };
             setSingleExpense(expenseData);
         }

@@ -26,6 +26,7 @@ const ScanReceiptToCreateExpenseOutputSchema = z.object({
   date: z.string().describe('The date of the expense (YYYY-MM-DD). If not found, use today\'s date.'),
   category: z.string().describe('The category of the expense (e.g., Groceries, Dining, Travel). If not clear, use "Other".'),
   vendor: z.string().describe('The name of the vendor or store.'),
+  paymentMode: z.enum(['Cash', 'Card', 'Online', 'Other']).describe('The payment mode used (Cash, Card, Online). Infer from the receipt. If unknown, use "Other".'),
 });
 export type ScanReceiptToCreateExpenseOutput = z.infer<
   typeof ScanReceiptToCreateExpenseOutputSchema
@@ -48,6 +49,7 @@ const prompt = ai.definePrompt({
   - Date: The date of the expense. Format it as YYYY-MM-DD. If you cannot find a date, use the current date.
   - Category: Infer a likely category for the expense from the vendor name or items (e.g., Groceries, Dining, Travel, Utilities). If you are unsure, default to "Other".
   - Vendor: The name of the vendor, store, or merchant.
+  - Payment Mode: The method of payment used. Look for terms like "Cash", "Credit Card", "Visa", "Mastercard", etc. to determine if it was "Card" or "Cash". If it seems like an online payment, use "Online". If you cannot determine the payment mode, default to "Other".
 
   Return the extracted information in JSON format.
 

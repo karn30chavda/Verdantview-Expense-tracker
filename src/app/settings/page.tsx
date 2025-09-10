@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -125,15 +126,17 @@ export default function SettingsPage() {
   };
 
   return (
-    <div className="container mx-auto max-w-4xl py-10">
+    <div className="container mx-auto max-w-2xl py-10">
       <div className="mb-8">
         <h1 className="text-3xl font-bold">Settings</h1>
         <p className="text-muted-foreground">Manage your application settings and data.</p>
       </div>
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-8 items-start">
-        <div className="grid gap-8">
-            <Card>
-            <CardHeader><CardTitle>Monthly Budget</CardTitle></CardHeader>
+      <div className="flex flex-col gap-8">
+        <Card>
+            <CardHeader>
+                <CardTitle>Monthly Budget</CardTitle>
+                <CardDescription>Set your total monthly spending limit.</CardDescription>
+            </CardHeader>
             <Form {...budgetForm}>
                 <form onSubmit={budgetForm.handleSubmit(handleUpdateBudget)}>
                 <CardContent>
@@ -142,9 +145,9 @@ export default function SettingsPage() {
                     name="monthlyBudget"
                     render={({ field }) => (
                         <FormItem>
-                        <FormLabel>Your monthly budget amount</FormLabel>
+                        <FormLabel>Budget Amount (INR)</FormLabel>
                         <FormControl>
-                            <Input type="number" placeholder="1000" {...field} />
+                            <Input type="number" placeholder="e.g., 50000" {...field} />
                         </FormControl>
                         <FormMessage />
                         </FormItem>
@@ -158,44 +161,13 @@ export default function SettingsPage() {
                 </CardFooter>
                 </form>
             </Form>
-            </Card>
+        </Card>
 
-            <Card>
-            <CardHeader>
-                <CardTitle>Data Management</CardTitle>
-                <CardDescription>Export, import, or clear your application data.</CardDescription>
-            </CardHeader>
-             <CardContent className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <Button onClick={handleExport} variant="outline">Export (JSON)</Button>
-                <Button onClick={handleExportPdf} variant="outline">Export (PDF)</Button>
-                
-                <Button asChild variant="outline" className="sm:col-span-2">
-                    <Link href="/scan">AI Import (Scan Receipt)</Link>
-                </Button>
-                
-                <AlertDialog>
-                    <AlertDialogTrigger asChild>
-                        <Button variant="destructive" className="sm:col-span-2">Clear All Data</Button>
-                    </AlertDialogTrigger>
-                    <AlertDialogContent>
-                        <AlertDialogHeader>
-                            <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
-                            <AlertDialogDescription>
-                            This action cannot be undone. This will permanently delete all your expenses, categories, and reminders.
-                            </AlertDialogDescription>
-                        </AlertDialogHeader>
-                        <AlertDialogFooter>
-                            <AlertDialogCancel>Cancel</AlertDialogCancel>
-                            <AlertDialogAction onClick={handleClearData} className="bg-destructive hover:bg-destructive/90">Yes, delete everything</AlertDialogAction>
-                        </AlertDialogFooter>
-                    </AlertDialogContent>
-                </AlertDialog>
-            </CardContent>
-            </Card>
-        </div>
-        
         <Card>
-          <CardHeader><CardTitle>Expense Categories</CardTitle></CardHeader>
+          <CardHeader>
+            <CardTitle>Expense Categories</CardTitle>
+            <CardDescription>Add or remove custom categories for your expenses.</CardDescription>
+          </CardHeader>
           <CardContent>
             <div className="flex flex-wrap gap-2 mb-6">
               {categories.map(cat => (
@@ -243,6 +215,39 @@ export default function SettingsPage() {
               </form>
             </Form>
           </CardContent>
+        </Card>
+
+        <Card>
+            <CardHeader>
+                <CardTitle>Data Management</CardTitle>
+                <CardDescription>Export, import, or clear your application data.</CardDescription>
+            </CardHeader>
+             <CardContent className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <Button onClick={handleExport} variant="outline">Export (JSON)</Button>
+                <Button onClick={handleExportPdf} variant="outline">Export (PDF)</Button>
+                
+                <Button asChild variant="outline" className="sm:col-span-2">
+                    <Link href="/scan">AI Import (Scan Receipt)</Link>
+                </Button>
+                
+                <AlertDialog>
+                    <AlertDialogTrigger asChild>
+                        <Button variant="destructive" className="sm:col-span-2">Clear All Data</Button>
+                    </AlertDialogTrigger>
+                    <AlertDialogContent>
+                        <AlertDialogHeader>
+                            <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
+                            <AlertDialogDescription>
+                            This action cannot be undone. This will permanently delete all your expenses, categories, and reminders.
+                            </AlertDialogDescription>
+                        </AlertDialogHeader>
+                        <AlertDialogFooter>
+                            <AlertDialogCancel>Cancel</AlertDialogCancel>
+                            <AlertDialogAction onClick={handleClearData} className="bg-destructive hover:bg-destructive/90">Yes, delete everything</AlertDialogAction>
+                        </AlertDialogFooter>
+                    </AlertDialogContent>
+                </AlertDialog>
+            </CardContent>
         </Card>
       </div>
     </div>

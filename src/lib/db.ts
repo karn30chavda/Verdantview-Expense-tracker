@@ -1,6 +1,7 @@
 'use client';
 
 import type { Expense, Category, Reminder, AppSettings } from './types';
+import { startOfDay } from 'date-fns';
 
 const DB_NAME = 'VerdantViewDB';
 const DB_VERSION = 1;
@@ -38,7 +39,8 @@ function getDB(): Promise<IDBDatabase> {
           catStore.createIndex('name', 'name', { unique: true });
         }
         if (!db.objectStoreNames.contains('reminders')) {
-          db.createObjectStore('reminders', { keyPath: 'id', autoIncrement: true });
+          const reminderStore = db.createObjectStore('reminders', { keyPath: 'id', autoIncrement: true });
+          reminderStore.createIndex('date', 'date', { unique: false });
         }
         if (!db.objectStoreNames.contains('settings')) {
           db.createObjectStore('settings', { keyPath: 'id' });
@@ -102,8 +104,16 @@ async function performDBOperation<T>(storeName: string, mode: IDBTransactionMode
     const transaction = db.transaction(storeName, mode);
     const store = transaction.objectStore(storeName);
     const request = operation(store);
+
+    transaction.oncomplete = () => {
+        if (mode === 'readwrite') {
+             dbEvents.dispatchEvent(new CustomEvent('dataChanged'));
+        }
+    };
+    
     request.onsuccess = () => resolve(request.result);
     request.onerror = () => reject(request.error);
+    transaction.onerror = () => reject(transaction.error);
   });
 }
 
@@ -120,6 +130,8 @@ export const deleteCategory = async (id: number): Promise<void> => {
     const db = await getDB();
     const tx = db.transaction('categories', 'readwrite');
     const store = tx.objectStore('categories');
+
+    tx.oncomplete = () => dbEvents.dispatchEvent(new CustomEvent('dataChanged'));
 
     return new Promise((resolve, reject) => {
         const getRequest = store.get(id);
@@ -143,6 +155,43 @@ export const deleteCategory = async (id: number): Promise<void> => {
 export const getReminders = (): Promise<Reminder[]> => performDBOperation('reminders', 'readonly', store => store.getAll());
 export const addReminder = (reminder: Omit<Reminder, 'id'>): Promise<IDBValidKey> => performDBOperation('reminders', 'readwrite', store => store.add(reminder));
 export const deleteReminder = (id: number): Promise<void> => performDBOperation('reminders', 'readwrite', store => store.delete(id));
+
+export const clearOldReminders = async (): Promise<void> => {
+    const db = await getDB();
+    return new Promise((resolve, reject) => {
+        const transaction = db.transaction('reminders', 'readwrite');
+        const store = transaction.objectStore('reminders');
+        const index = store.index('date');
+        
+        const yesterday = startOfDay(new Date());
+        const range = IDBKeyRange.upperBound(yesterday.toISOString(), true);
+        
+        const request = index.openCursor(range);
+        let deletedCount = 0;
+
+        request.onsuccess = (event) => {
+            const cursor = (event.target as IDBRequest<IDBCursorWithValue>).result;
+            if (cursor) {
+                cursor.delete();
+                deletedCount++;
+                cursor.continue();
+            }
+        };
+
+        transaction.oncomplete = () => {
+            if (deletedCount > 0) {
+                console.log(`Cleared ${deletedCount} old reminders.`);
+                dbEvents.dispatchEvent(new CustomEvent('dataChanged'));
+            }
+            resolve();
+        };
+
+        transaction.onerror = () => {
+            reject(transaction.error);
+        };
+    });
+};
+
 
 // Settings
 export const getSettings = (): Promise<AppSettings> => performDBOperation('settings', 'readonly', store => store.get(1));

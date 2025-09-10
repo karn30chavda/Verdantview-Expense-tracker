@@ -1,79 +1,57 @@
-// Basic service worker for PWA functionality.
-
-const CACHE_NAME = 'verdant-view-cache-v1';
-const urlsToCache = [
-    '/',
-    '/manifest.json',
-    '/icons/icon-192x192.png',
-    '/icons/icon-512x512.png',
-    // Add other assets that should be cached here.
-];
-
 self.addEventListener('install', (event) => {
-    event.waitUntil(
-        caches.open(CACHE_NAME)
-            .then((cache) => {
-                console.log('Opened cache');
-                return cache.addAll(urlsToCache);
-            })
-    );
+  self.skipWaiting();
 });
 
-self.addEventListener('fetch', (event) => {
-    event.respondWith(
-        caches.match(event.request)
-            .then((response) => {
-                // Cache hit - return response
-                if (response) {
-                    return response;
-                }
-
-                // IMPORTANT: Clone the request. A request is a stream and
-                // can only be consumed once. Since we are consuming this
-                // once by cache and once by the browser for fetch, we need
-                // to clone the response.
-                const fetchRequest = event.request.clone();
-
-                return fetch(fetchRequest).then(
-                    (response) => {
-                        // Check if we received a valid response
-                        if (!response || response.status !== 200 || response.type !== 'basic') {
-                            return response;
-                        }
-
-                        // IMPORTANT: Clone the response. A response is a stream
-                        // and because we want the browser to consume the response
-                        // as well as the cache consuming the response, we need
-                        // to clone it so we have two streams.
-                        const responseToCache = response.clone();
-
-                        caches.open(CACHE_NAME)
-                            .then((cache) => {
-                                cache.put(event.request, responseToCache);
-                            });
-
-                        return response;
-                    }
-                );
-            })
-    );
+self.addEventListener('activate', (event) => {
+  event.waitUntil(self.clients.claim());
 });
 
+self.addEventListener('message', (event) => {
+  if (event.data && event.data.type === 'SCHEDULE_REMINDER') {
+    const { title, date, tag } = event.data.payload;
+    const dueDate = new Date(date);
+    const now = new Date();
 
-// Handle notifications
+    // Notification for right now (for testing)
+    if (Notification.permission === 'granted') {
+         self.registration.showNotification('Reminder Set!', {
+            body: `You will be reminded about "${title}" on ${dueDate.toLocaleDateString()}.`,
+            icon: '/icons/icon-192x192.png',
+            tag: `test-${tag}`
+        });
+    }
+
+    // Schedule for 1 day before
+    const oneDayBefore = new Date(dueDate.getTime() - 24 * 60 * 60 * 1000);
+    if (oneDayBefore > now) {
+      scheduleNotification(oneDayBefore, `Reminder: ${title}`, `Your payment for "${title}" is due tomorrow.`, `reminder-1day-${tag}`);
+    }
+
+    // Schedule for the due date
+    if (dueDate > now) {
+      scheduleNotification(dueDate, `Reminder Due: ${title}`, `Your payment for "${title}" is due today.`, `reminder-today-${tag}`);
+    }
+  }
+});
+
+function scheduleNotification(scheduledTime, title, body, tag) {
+  const delay = scheduledTime.getTime() - new Date().getTime();
+  if (delay > 0) {
+    setTimeout(() => {
+      if (Notification.permission === 'granted') {
+        self.registration.showNotification(title, {
+          body: body,
+          icon: '/icons/icon-192x192.png',
+          tag: tag,
+        });
+      }
+    }, delay);
+  }
+}
+
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
-  // Add logic to handle notification clicks, e.g., open the app
   event.waitUntil(
-    clients.openWindow('/')
+    clients.openWindow('/reminders')
   );
-});
-
-// This is a placeholder for periodic sync to check for reminders.
-// This requires more advanced setup with server-side push notifications for reliability.
-self.addEventListener('periodicsync', (event) => {
-  if (event.tag === 'check-reminders') {
-    // event.waitUntil(checkRemindersAndShowNotifications());
-    console.log('Periodic sync event for reminders fired.');
-  }
 });

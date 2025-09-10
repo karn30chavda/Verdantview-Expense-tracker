@@ -8,6 +8,7 @@ import { ThemeProvider } from '@/components/theme-provider';
 import { Header } from '@/components/layout/header';
 import { Toaster } from '@/components/ui/toaster';
 import { useEffect } from 'react';
+import { clearOldReminders } from '@/lib/db';
 
 const inter = Inter({ subsets: ['latin'], variable: '--font-sans' });
 
@@ -29,7 +30,11 @@ export default function RootLayout({
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker
         .register('/sw.js')
-        .then((registration) => console.log('Service Worker registered with scope:', registration.scope))
+        .then(async (registration) => {
+          console.log('Service Worker registered with scope:', registration.scope);
+          // Clean up old reminders on app load
+          await clearOldReminders();
+        })
         .catch((error) => console.error('Service Worker registration failed:', error));
     }
 

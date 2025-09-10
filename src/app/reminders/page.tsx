@@ -22,12 +22,16 @@ const reminderSchema = z.object({
   date: z.date({ required_error: 'A date is required.' }),
 });
 
-async function showTestNotification(title: string, date: Date) {
+async function scheduleReminderNotifications(title: string, date: Date) {
     if (typeof window !== 'undefined' && 'serviceWorker' in navigator && Notification.permission === 'granted') {
         const registration = await navigator.serviceWorker.ready;
-        registration.showNotification("Reminder Set!", {
-            body: `You will be reminded about "${title}" on ${format(date, 'PPP')}.`,
-            icon: '/icons/icon-192x192.png',
+        registration.active?.postMessage({
+            type: 'SCHEDULE_REMINDER',
+            payload: {
+                title: title,
+                date: date.toISOString(),
+                tag: `reminder-${Date.now()}` // Unique tag for scheduling
+            }
         });
     }
 }
@@ -73,15 +77,15 @@ export default function RemindersPage() {
 
   const handleAddReminder = async (values: z.infer<typeof reminderSchema>) => {
     try {
-      await addReminder({
+      const newReminder: Omit<Reminder, 'id'> = {
         title: values.title,
         date: values.date.toISOString(),
-      });
-      toast({ title: 'Reminder added successfully!' });
+      };
+      await addReminder(newReminder);
+      toast({ title: 'Reminder added and scheduled!' });
       
-      // Show test notification
       if (notificationPermission === 'granted') {
-        await showTestNotification(values.title, values.date);
+        await scheduleReminderNotifications(values.title, values.date);
       }
       
       form.reset();

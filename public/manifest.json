@@ -1,11 +1,11 @@
 {
-  "name": "VerdantView",
+  "name": "VerdantView Expense Tracker",
   "short_name": "VerdantView",
   "description": "Your personal expense tracker, offline-first and AI-powered.",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#f0f7f1",
-  "theme_color": "#259b37",
+  "background_color": "#ffffff",
+  "theme_color": "#22c55e",
   "icons": [
     {
       "src": "/icons/icon-192x192.png",

@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
@@ -24,12 +25,24 @@ const categorySchema = z.object({
 });
 
 export default function SettingsPage() {
+  const router = useRouter();
   const [settings, setSettings] = useState<AppSettings | null>(null);
   const [categories, setCategories] = useState<Category[]>([]);
   const { toast } = useToast();
 
-  const budgetForm = useForm<z.infer<typeof budgetSchema>>({ resolver: zodResolver(budgetSchema) });
-  const categoryForm = useForm<z.infer<typeof categorySchema>>({ resolver: zodResolver(categorySchema) });
+  const budgetForm = useForm<z.infer<typeof budgetSchema>>({
+    resolver: zodResolver(budgetSchema),
+    defaultValues: {
+      monthlyBudget: 0,
+    },
+  });
+
+  const categoryForm = useForm<z.infer<typeof categorySchema>>({
+    resolver: zodResolver(categorySchema),
+    defaultValues: {
+      name: '',
+    },
+  });
 
   const fetchData = async () => {
     const [fetchedSettings, fetchedCategories] = await Promise.all([getSettings(), getCategories()]);
@@ -42,6 +55,7 @@ export default function SettingsPage() {
 
   useEffect(() => {
     fetchData();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const handleUpdateBudget = async (values: z.infer<typeof budgetSchema>) => {

@@ -9,6 +9,9 @@ let dbPromise: Promise<IDBDatabase> | null = null;
 
 const defaultCategories = ['Groceries', 'Dining', 'Travel', 'Utilities', 'Shopping', 'Other'];
 
+// Create a simple event emitter for database changes
+export const dbEvents = new EventTarget();
+
 function getDB(): Promise<IDBDatabase> {
   if (typeof window === 'undefined') {
     // This is a client-side only library
@@ -159,52 +162,44 @@ export const importData = async (data: { expenses?: Expense[], categories?: Cate
     const storeNames: IDBObjectStoreNames[] = ['expenses', 'categories', 'reminders', 'settings'];
     const tx = db.transaction(storeNames, 'readwrite');
     
-    const promises: Promise<any>[] = [];
-
-    if (data.expenses) {
-        const store = tx.objectStore('expenses');
-        promises.push(new Promise<void>(res => store.clear().onsuccess = () => res()));
-        data.expenses.forEach(e => {
-            const { id, ...rest } = e; // Explicitly remove id
-            promises.push(new Promise<void>(res => store.add(rest).onsuccess = () => res()));
-        });
-    }
-
-    if (data.categories) {
-        const store = tx.objectStore('categories');
-        promises.push(new Promise<void>(res => store.clear().onsuccess = () => res()));
-        defaultCategories.forEach(name => {
-            promises.push(new Promise<void>(res => store.add({ name }).onsuccess = () => res()));
-        });
-        const defaultCatSet = new Set(defaultCategories);
-        data.categories.forEach(c => {
-            if (!defaultCatSet.has(c.name)) {
-                const { id, ...rest } = c; // Explicitly remove id
-                promises.push(new Promise<void>(res => store.add(rest).onsuccess = () => res()));
-            }
-        });
-    }
-
-    if (data.reminders) {
-        const store = tx.objectStore('reminders');
-        promises.push(new Promise<void>(res => store.clear().onsuccess = () => res()));
-        data.reminders.forEach(r => {
-            const { id, ...rest } = r; // Explicitly remove id
-            promises.push(new Promise<void>(res => store.add(rest).onsuccess = () => res()));
-        });
-    }
-   
-    if (data.settings) {
-        // Settings store isn't cleared, it's just updated.
-        const store = tx.objectStore('settings');
-        promises.push(new Promise<void>(res => store.put(data.settings).onsuccess = () => res()));
-    }
-    
     return new Promise<void>((resolve, reject) => {
-        Promise.all(promises).then(() => {
-            tx.oncomplete = () => resolve();
-        }).catch(reject);
-        tx.onerror = () => reject(tx.error);
+      tx.oncomplete = () => {
+        // Dispatch a custom event to notify other parts of the app
+        dbEvents.dispatchEvent(new CustomEvent('dataChanged'));
+        resolve();
+      };
+      tx.onerror = () => reject(tx.error);
+
+      if (data.expenses) {
+          const store = tx.objectStore('expenses');
+          store.clear(); // Clear existing expenses
+          data.expenses.forEach(e => {
+              const { id, ...rest } = e; // Explicitly remove id to allow auto-increment
+              store.add(rest);
+          });
+      }
+      
+      if (data.categories) {
+          const store = tx.objectStore('categories');
+          store.clear();
+          const allCategories = new Set(defaultCategories);
+          data.categories.forEach(c => allCategories.add(c.name));
+          allCategories.forEach(name => store.add({ name }));
+      }
+
+      if (data.reminders) {
+          const store = tx.objectStore('reminders');
+          store.clear();
+          data.reminders.forEach(r => {
+              const { id, ...rest } = r;
+              store.add(rest);
+          });
+      }
+     
+      if (data.settings) {
+          const store = tx.objectStore('settings');
+          store.put({ ...data.settings, id: 1 });
+      }
     });
 };
 
@@ -213,19 +208,22 @@ export const clearAllData = async () => {
     const storeNames: IDBObjectStoreNames[] = ['expenses', 'categories', 'reminders', 'settings'];
     const tx = db.transaction(storeNames, 'readwrite');
 
-    for (const storeName of storeNames) {
-        tx.objectStore(storeName).clear();
-    }
-
     return new Promise<void>((resolve, reject) => {
         tx.oncomplete = async () => {
             try {
+                // Repopulate with defaults
                 await populateInitialData(db);
+                 // Dispatch a custom event to notify other parts of the app
+                dbEvents.dispatchEvent(new CustomEvent('dataChanged'));
                 resolve();
             } catch (error) {
                 reject(error);
             }
         };
         tx.onerror = () => reject(tx.error);
+        
+        for (const storeName of storeNames) {
+            tx.objectStore(storeName).clear();
+        }
     });
 };

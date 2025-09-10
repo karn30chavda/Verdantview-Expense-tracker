@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
-import { getExpenses, getReminders, getSettings, getCategories, addExpense } from '@/lib/db';
+import { getExpenses, getReminders, getSettings, getCategories, addExpense, dbEvents } from '@/lib/db';
 import type { Expense, Reminder, AppSettings, Category } from '@/lib/types';
 import { isWithinInterval, startOfWeek, endOfWeek, startOfMonth, endOfMonth, startOfYear, endOfYear, isToday } from 'date-fns';
 
@@ -35,6 +35,20 @@ export function useExpenses() {
 
   useEffect(() => {
     fetchData();
+
+    // Listen for the custom data changed event
+    const handleDataChanged = () => {
+      console.log('Data changed event received, refetching data...');
+      fetchData();
+    };
+    
+    dbEvents.addEventListener('dataChanged', handleDataChanged);
+
+    // Cleanup listener on component unmount
+    return () => {
+      dbEvents.removeEventListener('dataChanged', handleDataChanged);
+    };
+
   }, [fetchData]);
 
   const addMultipleExpenses = useCallback(async (newExpenses: Omit<Expense, 'id'>[]) => {

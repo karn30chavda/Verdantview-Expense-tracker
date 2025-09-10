@@ -121,9 +121,9 @@ export default function SettingsPage() {
           const data = JSON.parse(e.target.result as string);
           await importData(data);
           toast({ title: 'Data imported successfully!' });
-          await fetchData(); // re-fetch data to update UI
-          router.refresh(); // Force refresh of layout to pick up new data
+          // No longer need to call fetchData or router.refresh() here, the hook will handle it
         } catch (error) {
+          console.error(error);
           toast({ title: 'Failed to import data. Please check file format.', variant: 'destructive' });
         } finally {
             // Clear the input value to allow re-uploading the same file
@@ -139,8 +139,7 @@ export default function SettingsPage() {
     try {
       await clearAllData();
       toast({ title: 'All data has been cleared.' });
-      await fetchData(); // re-fetch data to update UI
-      router.refresh(); // Force refresh of layout to pick up new data
+       // No longer need to call fetchData or router.refresh() here, the hook will handle it
     } catch (error) {
       toast({ title: 'Failed to clear data.', variant: 'destructive' });
     }

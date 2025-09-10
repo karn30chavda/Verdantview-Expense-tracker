@@ -14,23 +14,54 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { Calendar } from '@/components/ui/calendar';
 import { cn } from '@/lib/utils';
 import { format } from 'date-fns';
-import { Calendar as CalendarIcon, Trash2, Bell, BellOff, Loader2 } from 'lucide-react';
+import { Calendar as CalendarIcon, Trash2, Bell, BellOff, Loader2, IndianRupee } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 
 const reminderSchema = z.object({
   title: z.string().min(2, { message: 'Title must be at least 2 characters.' }),
+  amount: z.coerce.number().positive({ message: 'Amount must be a positive number.' }),
   date: z.date({ required_error: 'A date is required.' }),
 });
 
-async function scheduleReminderNotifications(title: string, date: Date) {
+async function scheduleReminderNotifications(title: string, date: Date, amount: number) {
     if (typeof window !== 'undefined' && 'serviceWorker' in navigator && Notification.permission === 'granted') {
         const registration = await navigator.serviceWorker.ready;
+        // Immediate notification for testing
         registration.active?.postMessage({
             type: 'SCHEDULE_REMINDER',
             payload: {
-                title: title,
-                date: date.toISOString(),
-                tag: `reminder-${Date.now()}` // Unique tag for scheduling
+                title: `Reminder Added: ${title}`,
+                options: {
+                    body: `Due: ${format(date, 'PPP')} for ${new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR' }).format(amount)}`,
+                },
+                schedule: { at: Date.now() + 1000 } // Schedule for 1 second in the future for "instant" feel
+            }
+        });
+
+        // Schedule for one day before
+        const oneDayBefore = new Date(date.getTime() - 24 * 60 * 60 * 1000);
+        if (oneDayBefore > new Date()) {
+          registration.active?.postMessage({
+              type: 'SCHEDULE_REMINDER',
+              payload: {
+                  title: `Upcoming: ${title}`,
+                  options: {
+                      body: `Due tomorrow for ${new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR' }).format(amount)}`,
+                  },
+                  schedule: { at: oneDayBefore.getTime() }
+              }
+          });
+        }
+        
+        // Schedule for the due date
+        registration.active?.postMessage({
+            type: 'SCHEDULE_REMINDER',
+            payload: {
+                title: `Due Today: ${title}`,
+                options: {
+                    body: `Payment of ${new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR' }).format(amount)} is due today.`,
+                },
+                schedule: { at: date.getTime() }
             }
         });
     }
@@ -79,16 +110,17 @@ export default function RemindersPage() {
     try {
       const newReminder: Omit<Reminder, 'id'> = {
         title: values.title,
+        amount: values.amount,
         date: values.date.toISOString(),
       };
       await addReminder(newReminder);
       toast({ title: 'Reminder added and scheduled!' });
       
       if (notificationPermission === 'granted') {
-        await scheduleReminderNotifications(values.title, values.date);
+        await scheduleReminderNotifications(values.title, values.date, values.amount);
       }
       
-      form.reset();
+      form.reset({ title: '', amount: undefined, date: undefined });
       fetchReminders();
     } catch (error) {
       toast({ title: 'Failed to add reminder.', variant: 'destructive' });
@@ -106,7 +138,7 @@ export default function RemindersPage() {
   };
 
   return (
-    <div className="container mx-auto max-w-4xl py-10">
+    <div className="container mx-auto max-w-2xl py-10">
       <div className="flex flex-col md:flex-row md:items-center md:justify-between mb-8">
         <div>
           <h1 className="text-3xl font-bold">Reminders</h1>
@@ -124,15 +156,14 @@ export default function RemindersPage() {
         )}
       </div>
 
-      <div className="grid md:grid-cols-3 gap-8">
-        <div className="md:col-span-1">
-          <Card>
+      <div className="flex flex-col gap-8">
+        <Card>
             <CardHeader>
               <CardTitle>Add New Reminder</CardTitle>
             </CardHeader>
             <CardContent>
               <Form {...form}>
-                <form onSubmit={form.handleSubmit(handleAddReminder)} className="space-y-4">
+                <form onSubmit={form.handleSubmit(handleAddReminder)} className="space-y-6">
                   <FormField
                     control={form.control}
                     name="title"
@@ -144,72 +175,94 @@ export default function RemindersPage() {
                       </FormItem>
                     )}
                   />
-                  <FormField
-                    control={form.control}
-                    name="date"
-                    render={({ field }) => (
-                      <FormItem className="flex flex-col">
-                        <FormLabel>Due Date</FormLabel>
-                        <Popover>
-                          <PopoverTrigger asChild>
-                            <FormControl>
-                              <Button variant={'outline'} className={cn('pl-3 text-left font-normal', !field.value && 'text-muted-foreground')}>
-                                {field.value ? format(field.value, 'PPP') : <span>Pick a date</span>}
-                                <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
-                              </Button>
-                            </FormControl>
-                          </PopoverTrigger>
-                          <PopoverContent className="w-auto p-0" align="start">
-                            <Calendar mode="single" selected={field.value} onSelect={field.onChange} initialFocus />
-                          </PopoverContent>
-                        </Popover>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                  <Button type="submit" className="w-full" disabled={form.formState.isSubmitting}>
+                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <FormField
+                      control={form.control}
+                      name="amount"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Amount</FormLabel>
+                          <FormControl>
+                            <Input type="number" step="0.01" placeholder="0.00" {...field} />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    <FormField
+                        control={form.control}
+                        name="date"
+                        render={({ field }) => (
+                        <FormItem className="flex flex-col">
+                            <FormLabel>Due Date</FormLabel>
+                            <Popover>
+                            <PopoverTrigger asChild>
+                                <FormControl>
+                                <Button variant={'outline'} className={cn('pl-3 text-left font-normal', !field.value && 'text-muted-foreground')}>
+                                    {field.value ? format(field.value, 'PPP') : <span>Pick a date</span>}
+                                    <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
+                                </Button>
+                                </FormControl>
+                            </PopoverTrigger>
+                            <PopoverContent className="w-auto p-0" align="start">
+                                <Calendar mode="single" selected={field.value} onSelect={field.onChange} initialFocus />
+                            </PopoverContent>
+                            </Popover>
+                            <FormMessage />
+                        </FormItem>
+                        )}
+                    />
+                 </div>
+                  <Button type="submit" className="w-full sm:w-auto" disabled={form.formState.isSubmitting}>
                     {form.formState.isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                     Add Reminder
                   </Button>
                 </form>
               </Form>
             </CardContent>
-          </Card>
-        </div>
+        </Card>
 
-        <div className="md:col-span-2">
-          <Card>
+        <Card>
             <CardHeader>
               <CardTitle>Upcoming Reminders</CardTitle>
               <CardDescription>A list of your scheduled reminders.</CardDescription>
             </CardHeader>
             <CardContent>
               {loading ? (
-                <div className="space-y-2">
-                  <div className="h-12 w-full animate-pulse bg-muted rounded-md" />
-                  <div className="h-12 w-full animate-pulse bg-muted rounded-md" />
-                  <div className="h-12 w-full animate-pulse bg-muted rounded-md" />
+                <div className="space-y-3">
+                  <div className="h-16 w-full animate-pulse bg-muted rounded-md" />
+                  <div className="h-16 w-full animate-pulse bg-muted rounded-md" />
+                  <div className="h-16 w-full animate-pulse bg-muted rounded-md" />
                 </div>
               ) : reminders.length > 0 ? (
-                <ul className="space-y-2">
+                <ul className="space-y-3">
                   {reminders.map((reminder) => (
-                    <li key={reminder.id} className="flex items-center justify-between p-3 bg-muted/50 rounded-md">
-                      <div>
-                        <p className="font-medium">{reminder.title}</p>
-                        <p className="text-sm text-muted-foreground">Due: {format(new Date(reminder.date), 'PPP')}</p>
+                    <li key={reminder.id} className="flex items-center justify-between p-4 bg-muted/50 rounded-lg">
+                      <div className="flex items-center gap-4">
+                        <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary/10 text-primary">
+                          <IndianRupee className="h-5 w-5"/>
+                        </div>
+                        <div>
+                            <p className="font-medium">{reminder.title}</p>
+                            <p className="text-sm text-muted-foreground">Due: {format(new Date(reminder.date), 'PPP')}</p>
+                        </div>
                       </div>
-                      <Button variant="ghost" size="icon" onClick={() => reminder.id && handleDeleteReminder(reminder.id)}>
-                        <Trash2 className="h-4 w-4 text-destructive" />
-                      </Button>
+                      <div className="flex items-center gap-4">
+                        <p className="font-semibold text-lg">{new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR' }).format(reminder.amount)}</p>
+                        <Button variant="ghost" size="icon" onClick={() => reminder.id && handleDeleteReminder(reminder.id)}>
+                            <Trash2 className="h-4 w-4 text-destructive" />
+                        </Button>
+                      </div>
                     </li>
                   ))}
                 </ul>
               ) : (
-                <p className="text-center text-muted-foreground">No reminders set yet.</p>
+                 <div className="text-center py-10 border-2 border-dashed rounded-lg">
+                    <p className="text-muted-foreground">No reminders set yet.</p>
+                 </div>
               )}
             </CardContent>
-          </Card>
-        </div>
+        </Card>
       </div>
     </div>
   );

@@ -224,13 +224,16 @@ export default function DashboardPage() {
             </CardHeader>
             <CardContent>
                 {loading ? (
-                    <div className="flex justify-between">
-                        <Skeleton className="h-5 w-24" />
-                        <Skeleton className="h-5 w-20" />
+                    <div className="space-y-2">
+                        <Skeleton className="h-5 w-3/4" />
+                        <Skeleton className="h-5 w-1/2" />
                     </div>
                 ) : upcomingReminder ? (
-                    <div className="flex items-center justify-between">
-                      <p className="font-medium">{upcomingReminder.title}</p>
+                    <div>
+                      <div className="flex items-center justify-between">
+                        <p className="font-medium">{upcomingReminder.title}</p>
+                        <p className="font-semibold">{new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR' }).format(upcomingReminder.amount)}</p>
+                      </div>
                       <p className="text-sm text-muted-foreground">{format(new Date(upcomingReminder.date), 'MMM d, yyyy')}</p>
                     </div>
                 ) : (

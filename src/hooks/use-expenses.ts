@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
-import { getExpenses, getReminders, getSettings, getCategories } from '@/lib/db';
+import { getExpenses, getReminders, getSettings, getCategories, addExpense } from '@/lib/db';
 import type { Expense, Reminder, AppSettings, Category } from '@/lib/types';
 import { isWithinInterval, startOfWeek, endOfWeek, startOfMonth, endOfMonth, startOfYear, endOfYear, isToday } from 'date-fns';
 
@@ -37,6 +37,17 @@ export function useExpenses() {
     fetchData();
   }, [fetchData]);
 
+  const addMultipleExpenses = useCallback(async (newExpenses: Omit<Expense, 'id'>[]) => {
+    // We can't use a single transaction in Dexie without bulkAdd, so we do it one by one
+    // This is less efficient but works with the current DB setup.
+    for (const expense of newExpenses) {
+      await addExpense(expense);
+    }
+    // Refresh local state after adding
+    await fetchData();
+  }, [fetchData]);
+
+
   const summaries = useMemo(() => {
     const now = new Date();
     
@@ -53,5 +64,5 @@ export function useExpenses() {
     };
   }, [expenses]);
 
-  return { expenses, categories, reminders, settings, summaries, loading, error, refresh: fetchData };
+  return { expenses, categories, reminders, settings, summaries, loading, error, refresh: fetchData, addMultipleExpenses };
 }

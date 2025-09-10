@@ -159,38 +159,51 @@ export const importData = async (data: { expenses?: Expense[], categories?: Cate
     const storeNames: IDBObjectStoreNames[] = ['expenses', 'categories', 'reminders', 'settings'];
     const tx = db.transaction(storeNames, 'readwrite');
     
-    // Clear existing data that we are about to import
-    if (data.expenses) tx.objectStore('expenses').clear();
-    if (data.categories) tx.objectStore('categories').clear();
-    if (data.reminders) tx.objectStore('reminders').clear();
-    
-    // Use a Set for efficient category name lookup
-    const existingCategoryNames = new Set((await performDBOperation<Category[]>('categories', 'readonly', store => store.getAll())).map(c => c.name));
+    const promises: Promise<any>[] = [];
+
+    if (data.expenses) {
+        const store = tx.objectStore('expenses');
+        promises.push(new Promise<void>(res => store.clear().onsuccess = () => res()));
+        data.expenses.forEach(e => {
+            const { id, ...rest } = e; // Explicitly remove id
+            promises.push(new Promise<void>(res => store.add(rest).onsuccess = () => res()));
+        });
+    }
 
     if (data.categories) {
+        const store = tx.objectStore('categories');
+        promises.push(new Promise<void>(res => store.clear().onsuccess = () => res()));
+        defaultCategories.forEach(name => {
+            promises.push(new Promise<void>(res => store.add({ name }).onsuccess = () => res()));
+        });
+        const defaultCatSet = new Set(defaultCategories);
         data.categories.forEach(c => {
-            // Avoid adding duplicate category names
-            if (!existingCategoryNames.has(c.name)) {
-                tx.objectStore('categories').add(c);
-                existingCategoryNames.add(c.name);
+            if (!defaultCatSet.has(c.name)) {
+                const { id, ...rest } = c; // Explicitly remove id
+                promises.push(new Promise<void>(res => store.add(rest).onsuccess = () => res()));
             }
         });
     }
 
-    if (data.expenses) {
-        data.expenses.forEach(e => tx.objectStore('expenses').add(e));
-    }
-    
     if (data.reminders) {
-        data.reminders.forEach(r => tx.objectStore('reminders').add(r));
+        const store = tx.objectStore('reminders');
+        promises.push(new Promise<void>(res => store.clear().onsuccess = () => res()));
+        data.reminders.forEach(r => {
+            const { id, ...rest } = r; // Explicitly remove id
+            promises.push(new Promise<void>(res => store.add(rest).onsuccess = () => res()));
+        });
     }
    
     if (data.settings) {
-        tx.objectStore('settings').put(data.settings);
+        // Settings store isn't cleared, it's just updated.
+        const store = tx.objectStore('settings');
+        promises.push(new Promise<void>(res => store.put(data.settings).onsuccess = () => res()));
     }
     
     return new Promise<void>((resolve, reject) => {
-        tx.oncomplete = () => resolve();
+        Promise.all(promises).then(() => {
+            tx.oncomplete = () => resolve();
+        }).catch(reject);
         tx.onerror = () => reject(tx.error);
     });
 };

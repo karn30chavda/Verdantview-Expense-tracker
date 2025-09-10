@@ -125,10 +125,13 @@ export default function SettingsPage() {
           router.refresh(); // Force refresh of layout to pick up new data
         } catch (error) {
           toast({ title: 'Failed to import data. Please check file format.', variant: 'destructive' });
+        } finally {
+            // Clear the input value to allow re-uploading the same file
+            if(event.target) {
+              event.target.value = '';
+            }
         }
       };
-      // Clear the input value to allow re-uploading the same file
-      event.target.value = '';
     }
   };
 
@@ -149,7 +152,7 @@ export default function SettingsPage() {
         <h1 className="text-3xl font-bold">Settings</h1>
         <p className="text-muted-foreground">Manage your application settings and data.</p>
       </div>
-      <div className="grid md:grid-cols-2 gap-8 items-start">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-8 items-start">
         <div className="grid gap-8">
             <Card>
             <CardHeader><CardTitle>Monthly Budget</CardTitle></CardHeader>
@@ -181,7 +184,7 @@ export default function SettingsPage() {
 
             <Card>
             <CardHeader><CardTitle>Data Management</CardTitle></CardHeader>
-             <CardContent className="grid sm:grid-cols-2 gap-4">
+             <CardContent className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                  <Button onClick={handleExport} variant="outline">Export Data (JSON)</Button>
                 <Button asChild variant="outline">
                 <label htmlFor="import-file" className="cursor-pointer w-full h-full flex items-center justify-center">Import Data (JSON)</label>

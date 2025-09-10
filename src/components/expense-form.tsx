@@ -184,7 +184,7 @@ export function ExpenseForm({ expense, onSave }: ExpenseFormProps) {
                       mode="single"
                       selected={field.value}
                       onSelect={(date) => {
-                        field.onChange(date);
+                        field.onChange(date || new Date());
                         setIsDatePickerOpen(false);
                       }}
                       disabled={(date) =>

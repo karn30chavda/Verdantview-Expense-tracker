@@ -6,17 +6,28 @@ import { useRouter } from 'next/navigation';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
+import jsPDF from 'jspdf';
+import 'jspdf-autotable';
+import { format } from 'date-fns';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Badge } from '@/components/ui/badge';
-import { getSettings, updateSettings, getCategories, addCategory, deleteCategory, exportData, clearAllData } from '@/lib/db';
-import type { AppSettings, Category } from '@/lib/types';
+import { getSettings, updateSettings, getCategories, addCategory, deleteCategory, exportData, clearAllData, getExpenses } from '@/lib/db';
+import type { AppSettings, Category, Expense } from '@/lib/types';
 import { useToast } from '@/hooks/use-toast';
 import { Loader2, Trash2, X } from 'lucide-react';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import Link from 'next/link';
+
+// Extend jsPDF with autoTable
+declare module 'jspdf' {
+    interface jsPDF {
+        autoTable: (options: any) => jsPDF;
+    }
+}
+
 
 const budgetSchema = z.object({
   monthlyBudget: z.coerce.number().min(0, { message: "Budget must be a positive number." }),
@@ -110,9 +121,56 @@ export default function SettingsPage() {
       toast({ title: 'Failed to export data.', variant: 'destructive' });
     }
   };
+  
+  const handleExportPdf = async () => {
+    try {
+      const expenses = await getExpenses();
+      if (expenses.length === 0) {
+        toast({ title: 'No expenses to export.', variant: 'destructive' });
+        return;
+      }
+      
+      const doc = new jsPDF();
+      
+      doc.setFontSize(18);
+      doc.text('Expense Report', 14, 22);
+      doc.setFontSize(11);
+      doc.text(`Report generated on: ${format(new Date(), 'PPP')}`, 14, 30);
+      
+      const tableColumn = ["Date", "Title", "Category", "Payment Mode", "Amount"];
+      const tableRows: (string | number)[][] = [];
 
-  const handleExportPdf = () => {
-    toast({ title: 'Feature Coming Soon!', description: 'PDF export functionality will be available in a future update.' });
+      expenses.forEach(expense => {
+        const expenseData = [
+          format(new Date(expense.date), 'yyyy-MM-dd'),
+          expense.title,
+          expense.category,
+          expense.paymentMode,
+          new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR' }).format(expense.amount),
+        ];
+        tableRows.push(expenseData);
+      });
+      
+      const totalExpenses = expenses.reduce((sum, e) => sum + e.amount, 0);
+      tableRows.push(['', '', '', 'Total', new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR' }).format(totalExpenses)]);
+
+      doc.autoTable({
+        startY: 38,
+        head: [tableColumn],
+        body: tableRows,
+        foot: [[ '','', '', 'Total', new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR' }).format(totalExpenses)]],
+        showFoot: 'last_page',
+        footStyles: {
+            fontStyle: 'bold',
+        }
+      });
+      
+      doc.save(`verdantview-expenses-${new Date().toISOString().split('T')[0]}.pdf`);
+      toast({ title: 'PDF exported successfully!' });
+    } catch (error) {
+      toast({ title: 'Failed to export PDF.', variant: 'destructive' });
+      console.error("PDF Export Error: ", error);
+    }
   };
   
   const handleClearData = async () => {
@@ -171,7 +229,7 @@ export default function SettingsPage() {
           <CardContent>
             <div className="flex flex-wrap gap-2 mb-6">
               {categories.map(cat => (
-                <Badge key={cat.id} variant={defaultCategories.includes(cat.name) ? 'default': 'secondary'} className="group text-base pr-1">
+                <Badge key={cat.id} variant={defaultCategories.includes(cat.name) ? 'default': 'secondary'} className="group text-sm pr-1">
                   {cat.name}
                   {!defaultCategories.includes(cat.name) && cat.id && (
                      <AlertDialog>

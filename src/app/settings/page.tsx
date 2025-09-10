@@ -229,12 +229,12 @@ export default function SettingsPage() {
           <CardContent>
             <div className="flex flex-wrap gap-2 mb-6">
               {categories.map(cat => (
-                <Badge key={cat.id} variant={defaultCategories.includes(cat.name) ? 'default': 'secondary'} className="group text-sm pr-1">
+                <Badge key={cat.id} variant={defaultCategories.includes(cat.name) ? 'default': 'secondary'} className="group text-sm pr-1.5 py-1 rounded-md">
                   {cat.name}
                   {!defaultCategories.includes(cat.name) && cat.id && (
                      <AlertDialog>
                         <AlertDialogTrigger asChild>
-                            <button className="ml-1 rounded-full opacity-50 group-hover:opacity-100 transition-opacity">
+                            <button className="ml-1.5 rounded-full opacity-50 group-hover:opacity-100 transition-opacity hover:bg-destructive/20 p-0.5">
                                 <X className="h-3 w-3" />
                             </button>
                         </AlertDialogTrigger>

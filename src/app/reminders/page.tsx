@@ -162,13 +162,13 @@ export default function RemindersPage() {
             </CardHeader>
             <CardContent>
               <Form {...form}>
-                <form onSubmit={form.handleSubmit(handleAddReminder)} className="flex flex-col sm:flex-row items-start gap-4">
+                <form onSubmit={form.handleSubmit(handleAddReminder)} className="flex flex-col sm:flex-row items-end gap-4">
                     <FormField
                       control={form.control}
                       name="title"
                       render={({ field }) => (
                         <FormItem className="flex-grow w-full">
-                          <FormLabel className="sr-only">Title</FormLabel>
+                          <FormLabel>Title</FormLabel>
                           <FormControl><Input placeholder="e.g., Electricity Bill" {...field} /></FormControl>
                           <FormMessage />
                         </FormItem>
@@ -179,7 +179,7 @@ export default function RemindersPage() {
                         name="date"
                         render={({ field }) => (
                         <FormItem className="flex-grow w-full sm:w-auto">
-                            <FormLabel className="sr-only">Due Date</FormLabel>
+                            <FormLabel>Due Date</FormLabel>
                             <Popover>
                             <PopoverTrigger asChild>
                                 <FormControl>

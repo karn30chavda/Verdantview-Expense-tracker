@@ -7,9 +7,12 @@ const DB_VERSION = 1;
 
 let dbPromise: Promise<IDBDatabase> | null = null;
 
+const defaultCategories = ['Groceries', 'Dining', 'Travel', 'Utilities', 'Shopping', 'Other'];
+
 function getDB(): Promise<IDBDatabase> {
   if (typeof window === 'undefined') {
-    return Promise.reject('IndexedDB not available');
+    // This is a client-side only library
+    return Promise.reject(new Error('IndexedDB not available on server-side.'));
   }
 
   if (!dbPromise) {
@@ -42,35 +45,55 @@ function getDB(): Promise<IDBDatabase> {
       request.onsuccess = (event) => {
         const db = (event.target as IDBOpenDBRequest).result;
         
-        // Populate default categories and settings if first time
-        const transaction = db.transaction(['categories', 'settings'], 'readwrite');
-        const categoryStore = transaction.objectStore('categories');
-        const settingsStore = transaction.objectStore('settings');
-
-        categoryStore.count().onsuccess = (e) => {
-            const count = (e.target as IDBRequest).result;
-            if (count === 0) {
-                const defaultCategories = ['Groceries', 'Dining', 'Travel', 'Utilities', 'Shopping', 'Other'];
-                defaultCategories.forEach(name => categoryStore.add({ name }));
-            }
-        };
-
-        settingsStore.count().onsuccess = (e) => {
-            const count = (e.target as IDBRequest).result;
-            if (count === 0) {
-                settingsStore.add({ id: 1, monthlyBudget: 1000 });
-            }
-        };
-        
-        resolve(db);
+        // Use a separate function to handle initial data population
+        populateInitialData(db).then(() => resolve(db)).catch(reject);
       };
     });
   }
   return dbPromise;
 }
 
+async function populateInitialData(db: IDBDatabase): Promise<void> {
+    return new Promise((resolve, reject) => {
+        const transaction = db.transaction(['categories', 'settings'], 'readwrite');
+        const categoryStore = transaction.objectStore('categories');
+        const settingsStore = transaction.objectStore('settings');
+        let checksCompleted = 0;
+
+        const onComplete = () => {
+            checksCompleted++;
+            if (checksCompleted === 2) {
+                transaction.oncomplete = () => resolve();
+                transaction.onerror = () => reject(transaction.error);
+            }
+        };
+
+        const catRequest = categoryStore.count();
+        catRequest.onsuccess = (e) => {
+            const count = (e.target as IDBRequest).result;
+            if (count === 0) {
+                defaultCategories.forEach(name => categoryStore.add({ name }));
+            }
+            onComplete();
+        };
+        catRequest.onerror = () => reject(catRequest.error);
+        
+
+        const settingsRequest = settingsStore.count();
+        settingsRequest.onsuccess = (e) => {
+            const count = (e.target as IDBRequest).result;
+            if (count === 0) {
+                settingsStore.add({ id: 1, monthlyBudget: 1000 });
+            }
+            onComplete();
+        };
+        settingsRequest.onerror = () => reject(settingsRequest.error);
+    });
+}
+
+
 // Generic CRUD operations
-async function performDBOperation<T>(storeName: string, mode: IDBTransactionMode, operation: (store: IDBObjectStore) => IDBRequest<T>): Promise<T> {
+async function performDBOperation<T>(storeName: string, mode: IDBTransactionMode, operation: (store: IDBObjectStore) => IDBRequest | IDBRequest<any[]>): Promise<T> {
   const db = await getDB();
   return new Promise((resolve, reject) => {
     const transaction = db.transaction(storeName, mode);
@@ -89,8 +112,29 @@ export const deleteExpense = (id: number): Promise<void> => performDBOperation('
 
 // Categories
 export const getCategories = (): Promise<Category[]> => performDBOperation('categories', 'readonly', store => store.getAll());
-export const addCategory = (category: {name: string}): Promise<IDBValidKey> => performDBOperation('categories', 'readwrite', store => store.add(category));
-export const deleteCategory = (id: number): Promise<void> => performDBOperation('categories', 'readwrite', store => store.delete(id));
+export const addCategory = (category: Omit<Category, 'id'>): Promise<IDBValidKey> => performDBOperation('categories', 'readwrite', store => store.add(category));
+export const deleteCategory = async (id: number): Promise<void> => {
+    const db = await getDB();
+    const tx = db.transaction('categories', 'readwrite');
+    const store = tx.objectStore('categories');
+
+    return new Promise((resolve, reject) => {
+        const getRequest = store.get(id);
+        getRequest.onsuccess = () => {
+            const categoryToDelete = getRequest.result;
+            if (categoryToDelete && defaultCategories.includes(categoryToDelete.name)) {
+                // We double-check here, but primary logic is in the UI
+                reject(new Error('Cannot delete a default category.'));
+                return;
+            }
+            const deleteRequest = store.delete(id);
+            deleteRequest.onsuccess = () => resolve();
+            deleteRequest.onerror = () => reject(deleteRequest.error);
+        };
+        getRequest.onerror = () => reject(getRequest.error);
+    });
+};
+
 
 // Reminders
 export const getReminders = (): Promise<Reminder[]> => performDBOperation('reminders', 'readonly', store => store.getAll());
@@ -99,7 +143,7 @@ export const deleteReminder = (id: number): Promise<void> => performDBOperation(
 
 // Settings
 export const getSettings = (): Promise<AppSettings> => performDBOperation('settings', 'readonly', store => store.get(1));
-export const updateSettings = (settings: AppSettings): Promise<IDBValidKey> => performDBOperation('settings', 'readwrite', store => store.put({ ...settings, id: 1 }));
+export const updateSettings = (settings: Partial<AppSettings>): Promise<IDBValidKey> => performDBOperation('settings', 'readwrite', store => store.put({ ...settings, id: 1 }));
 
 // Data Management
 export const exportData = async () => {
@@ -110,44 +154,64 @@ export const exportData = async () => {
     return { expenses, categories, reminders, settings };
 };
 
-export const importData = async (data: { expenses: Expense[], categories: Category[], reminders: Reminder[], settings: AppSettings }) => {
+export const importData = async (data: { expenses?: Expense[], categories?: Category[], reminders?: Reminder[], settings?: AppSettings }) => {
     const db = await getDB();
-    const tx = db.transaction(['expenses', 'categories', 'reminders', 'settings'], 'readwrite');
-    tx.objectStore('expenses').clear();
-    tx.objectStore('categories').clear();
-    tx.objectStore('reminders').clear();
+    const storeNames: IDBObjectStoreNames[] = ['expenses', 'categories', 'reminders', 'settings'];
+    const tx = db.transaction(storeNames, 'readwrite');
     
-    data.expenses.forEach(e => tx.objectStore('expenses').add(e));
-    data.categories.forEach(c => tx.objectStore('categories').add(c));
-    data.reminders.forEach(r => tx.objectStore('reminders').add(r));
-    tx.objectStore('settings').put(data.settings);
+    // Clear existing data that we are about to import
+    if (data.expenses) tx.objectStore('expenses').clear();
+    if (data.categories) tx.objectStore('categories').clear();
+    if (data.reminders) tx.objectStore('reminders').clear();
     
-    return new Promise((resolve, reject) => {
-        tx.oncomplete = () => resolve(true);
+    // Use a Set for efficient category name lookup
+    const existingCategoryNames = new Set((await performDBOperation<Category[]>('categories', 'readonly', store => store.getAll())).map(c => c.name));
+
+    if (data.categories) {
+        data.categories.forEach(c => {
+            // Avoid adding duplicate category names
+            if (!existingCategoryNames.has(c.name)) {
+                tx.objectStore('categories').add(c);
+                existingCategoryNames.add(c.name);
+            }
+        });
+    }
+
+    if (data.expenses) {
+        data.expenses.forEach(e => tx.objectStore('expenses').add(e));
+    }
+    
+    if (data.reminders) {
+        data.reminders.forEach(r => tx.objectStore('reminders').add(r));
+    }
+   
+    if (data.settings) {
+        tx.objectStore('settings').put(data.settings);
+    }
+    
+    return new Promise<void>((resolve, reject) => {
+        tx.oncomplete = () => resolve();
         tx.onerror = () => reject(tx.error);
     });
 };
 
 export const clearAllData = async () => {
     const db = await getDB();
-    const tx = db.transaction(['expenses', 'categories', 'reminders', 'settings'], 'readwrite');
-    tx.objectStore('expenses').clear();
-    tx.objectStore('categories').clear();
-    tx.objectStore('reminders').clear();
-    tx.objectStore('settings').clear();
+    const storeNames: IDBObjectStoreNames[] = ['expenses', 'categories', 'reminders', 'settings'];
+    const tx = db.transaction(storeNames, 'readwrite');
 
-    return new Promise((resolve, reject) => {
-        tx.oncomplete = () => {
-             // Re-populate default categories and settings after clearing
-            const populateTx = db.transaction(['categories', 'settings'], 'readwrite');
-            const categoryStore = populateTx.objectStore('categories');
-            const settingsStore = populateTx.objectStore('settings');
-            const defaultCategories = ['Groceries', 'Dining', 'Travel', 'Utilities', 'Shopping', 'Other'];
-            defaultCategories.forEach(name => categoryStore.add({ name }));
-            settingsStore.add({ id: 1, monthlyBudget: 1000 });
-            
-            populateTx.oncomplete = () => resolve(true);
-            populateTx.onerror = () => reject(populateTx.error);
+    for (const storeName of storeNames) {
+        tx.objectStore(storeName).clear();
+    }
+
+    return new Promise<void>((resolve, reject) => {
+        tx.oncomplete = async () => {
+            try {
+                await populateInitialData(db);
+                resolve();
+            } catch (error) {
+                reject(error);
+            }
         };
         tx.onerror = () => reject(tx.error);
     });

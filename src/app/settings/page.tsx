@@ -24,6 +24,8 @@ const categorySchema = z.object({
   name: z.string().min(2, { message: "Category name must be at least 2 characters." }),
 });
 
+const defaultCategories = ['Groceries', 'Dining', 'Travel', 'Utilities', 'Shopping', 'Other'];
+
 export default function SettingsPage() {
   const router = useRouter();
   const [settings, setSettings] = useState<AppSettings | null>(null);
@@ -70,7 +72,7 @@ export default function SettingsPage() {
 
   const handleAddCategory = async (values: z.infer<typeof categorySchema>) => {
     try {
-      await addCategory(values);
+      await addCategory({ name: values.name });
       toast({ title: 'Category added successfully!' });
       categoryForm.reset({ name: '' });
       fetchData();
@@ -79,7 +81,11 @@ export default function SettingsPage() {
     }
   };
 
-  const handleDeleteCategory = async (id: number) => {
+  const handleDeleteCategory = async (id: number, name: string) => {
+    if (defaultCategories.includes(name)) {
+      toast({ title: 'Cannot delete default category.', variant: 'destructive'});
+      return;
+    }
     try {
       await deleteCategory(id);
       toast({ title: 'Category deleted.' });
@@ -106,26 +112,32 @@ export default function SettingsPage() {
   const handleImport = (event: React.ChangeEvent<HTMLInputElement>) => {
     const fileReader = new FileReader();
     if (!event.target.files) return;
-    fileReader.readAsText(event.target.files[0], "UTF-8");
-    fileReader.onload = async e => {
-      try {
-        const data = JSON.parse(e.target?.result as string);
-        await importData(data);
-        toast({ title: 'Data imported successfully!' });
-        fetchData();
-        router.push('/'); // Navigate to refresh app state
-      } catch (error) {
-        toast({ title: 'Failed to import data. Please check file format.', variant: 'destructive' });
-      }
-    };
+    const file = event.target.files[0];
+    if (file) {
+      fileReader.readAsText(file, "UTF-8");
+      fileReader.onload = async e => {
+        try {
+          if (!e.target?.result) throw new Error("File could not be read.");
+          const data = JSON.parse(e.target.result as string);
+          await importData(data);
+          toast({ title: 'Data imported successfully!' });
+          await fetchData(); // re-fetch data to update UI
+          router.refresh(); // Force refresh of layout to pick up new data
+        } catch (error) {
+          toast({ title: 'Failed to import data. Please check file format.', variant: 'destructive' });
+        }
+      };
+      // Clear the input value to allow re-uploading the same file
+      event.target.value = '';
+    }
   };
 
   const handleClearData = async () => {
     try {
       await clearAllData();
       toast({ title: 'All data has been cleared.' });
-      fetchData();
-      router.push('/'); // Navigate to refresh app state
+      await fetchData(); // re-fetch data to update UI
+      router.refresh(); // Force refresh of layout to pick up new data
     } catch (error) {
       toast({ title: 'Failed to clear data.', variant: 'destructive' });
     }
@@ -137,45 +149,94 @@ export default function SettingsPage() {
         <h1 className="text-3xl font-bold">Settings</h1>
         <p className="text-muted-foreground">Manage your application settings and data.</p>
       </div>
-      <div className="space-y-8">
-        <Card>
-          <CardHeader><CardTitle>Monthly Budget</CardTitle></CardHeader>
-          <Form {...budgetForm}>
-            <form onSubmit={budgetForm.handleSubmit(handleUpdateBudget)}>
-              <CardContent>
-                <FormField
-                  control={budgetForm.control}
-                  name="monthlyBudget"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Your monthly budget amount</FormLabel>
-                      <FormControl>
-                        <Input type="number" placeholder="1000" {...field} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-              </CardContent>
-              <CardFooter>
-                <Button type="submit" disabled={budgetForm.formState.isSubmitting}>
-                   {budgetForm.formState.isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />} Save Budget
-                </Button>
-              </CardFooter>
-            </form>
-          </Form>
-        </Card>
+      <div className="grid md:grid-cols-2 gap-8 items-start">
+        <div className="grid gap-8">
+            <Card>
+            <CardHeader><CardTitle>Monthly Budget</CardTitle></CardHeader>
+            <Form {...budgetForm}>
+                <form onSubmit={budgetForm.handleSubmit(handleUpdateBudget)}>
+                <CardContent>
+                    <FormField
+                    control={budgetForm.control}
+                    name="monthlyBudget"
+                    render={({ field }) => (
+                        <FormItem>
+                        <FormLabel>Your monthly budget amount</FormLabel>
+                        <FormControl>
+                            <Input type="number" placeholder="1000" {...field} />
+                        </FormControl>
+                        <FormMessage />
+                        </FormItem>
+                    )}
+                    />
+                </CardContent>
+                <CardFooter>
+                    <Button type="submit" disabled={budgetForm.formState.isSubmitting}>
+                    {budgetForm.formState.isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />} Save Budget
+                    </Button>
+                </CardFooter>
+                </form>
+            </Form>
+            </Card>
 
+            <Card>
+            <CardHeader><CardTitle>Data Management</CardTitle></CardHeader>
+             <CardContent className="grid sm:grid-cols-2 gap-4">
+                 <Button onClick={handleExport} variant="outline">Export Data (JSON)</Button>
+                <Button asChild variant="outline">
+                <label htmlFor="import-file" className="cursor-pointer w-full h-full flex items-center justify-center">Import Data (JSON)</label>
+                </Button>
+                <Input id="import-file" type="file" accept=".json" onChange={handleImport} className="hidden" />
+                
+                <AlertDialog>
+                    <AlertDialogTrigger asChild>
+                        <Button variant="destructive" className="sm:col-span-2">Clear All Data</Button>
+                    </AlertDialogTrigger>
+                    <AlertDialogContent>
+                        <AlertDialogHeader>
+                            <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
+                            <AlertDialogDescription>
+                            This action cannot be undone. This will permanently delete all your expenses, categories, and reminders.
+                            </AlertDialogDescription>
+                        </AlertDialogHeader>
+                        <AlertDialogFooter>
+                            <AlertDialogCancel>Cancel</AlertDialogCancel>
+                            <AlertDialogAction onClick={handleClearData} className="bg-destructive hover:bg-destructive/90">Yes, delete everything</AlertDialogAction>
+                        </AlertDialogFooter>
+                    </AlertDialogContent>
+                </AlertDialog>
+            </CardContent>
+            </Card>
+        </div>
+        
         <Card>
           <CardHeader><CardTitle>Expense Categories</CardTitle></CardHeader>
           <CardContent>
             <div className="flex flex-wrap gap-2 mb-6">
               {categories.map(cat => (
-                <Badge key={cat.id} variant="secondary" className="group text-base pr-1">
+                <Badge key={cat.id} variant={defaultCategories.includes(cat.name) ? 'default': 'secondary'} className="group text-base pr-1">
                   {cat.name}
-                  <button onClick={() => cat.id && handleDeleteCategory(cat.id)} className="ml-1 rounded-full opacity-50 group-hover:opacity-100 transition-opacity">
-                    <X className="h-3 w-3" />
-                  </button>
+                  {!defaultCategories.includes(cat.name) && cat.id && (
+                     <AlertDialog>
+                        <AlertDialogTrigger asChild>
+                            <button className="ml-1 rounded-full opacity-50 group-hover:opacity-100 transition-opacity">
+                                <X className="h-3 w-3" />
+                            </button>
+                        </AlertDialogTrigger>
+                        <AlertDialogContent>
+                            <AlertDialogHeader>
+                                <AlertDialogTitle>Delete &quot;{cat.name}&quot;?</AlertDialogTitle>
+                                <AlertDialogDescription>
+                                Are you sure you want to delete this category? This action cannot be undone.
+                                </AlertDialogDescription>
+                            </AlertDialogHeader>
+                            <AlertDialogFooter>
+                                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                <AlertDialogAction onClick={() => cat.id && handleDeleteCategory(cat.id, cat.name)}>Delete</AlertDialogAction>
+                            </AlertDialogFooter>
+                        </AlertDialogContent>
+                    </AlertDialog>
+                  )}
                 </Badge>
               ))}
             </div>
@@ -196,35 +257,6 @@ export default function SettingsPage() {
                 </Button>
               </form>
             </Form>
-          </CardContent>
-        </Card>
-        
-        <Card>
-          <CardHeader><CardTitle>Data Management</CardTitle></CardHeader>
-          <CardContent className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            <Button onClick={handleExport} variant="outline">Export Data</Button>
-            <Button asChild variant="outline">
-              <label htmlFor="import-file" className="cursor-pointer">Import Data</label>
-            </Button>
-            <Input id="import-file" type="file" accept=".json" onChange={handleImport} className="hidden" />
-            
-            <AlertDialog>
-                <AlertDialogTrigger asChild>
-                    <Button variant="destructive" className="sm:col-span-2 lg:col-span-1">Clear All Data</Button>
-                </AlertDialogTrigger>
-                <AlertDialogContent>
-                    <AlertDialogHeader>
-                        <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
-                        <AlertDialogDescription>
-                        This action cannot be undone. This will permanently delete all your expenses, categories, and reminders.
-                        </AlertDialogDescription>
-                    </AlertDialogHeader>
-                    <AlertDialogFooter>
-                        <AlertDialogCancel>Cancel</AlertDialogCancel>
-                        <AlertDialogAction onClick={handleClearData} className="bg-destructive hover:bg-destructive/90">Yes, delete everything</AlertDialogAction>
-                    </AlertDialogFooter>
-                </AlertDialogContent>
-            </AlertDialog>
           </CardContent>
         </Card>
       </div>

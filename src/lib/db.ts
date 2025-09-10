@@ -1,3 +1,4 @@
+
 'use client';
 
 import type { Expense, Category, Reminder, AppSettings } from './types';
@@ -8,7 +9,7 @@ const DB_VERSION = 2; // Incremented version to trigger onupgradeneeded
 
 let dbPromise: Promise<IDBDatabase> | null = null;
 
-const defaultCategories = ['Groceries', 'Dining', 'Travel', 'Utilities', 'Shopping', 'Other'];
+const defaultCategories = ['Groceries', 'Dining', 'Travel', 'Utilities', 'Shopping', 'Food', 'Medicine', 'Other'];
 
 // Create a simple event emitter for database changes
 export const dbEvents = new EventTarget();
@@ -74,21 +75,26 @@ async function populateInitialData(db: IDBDatabase): Promise<void> {
         const settingsStore = transaction.objectStore('settings');
         let checksCompleted = 0;
 
-        const onComplete = () => {
+        transaction.oncomplete = () => resolve();
+        transaction.onerror = () => reject(transaction.error);
+
+        const onCheckComplete = () => {
             checksCompleted++;
-            if (checksCompleted === 2) {
-                transaction.oncomplete = () => resolve();
-                transaction.onerror = () => reject(transaction.error);
-            }
         };
 
-        const catRequest = categoryStore.count();
+        const catRequest = categoryStore.getAll();
         catRequest.onsuccess = (e) => {
-            const count = (e.target as IDBRequest).result;
-            if (count === 0) {
-                defaultCategories.forEach(name => categoryStore.add({ name }));
-            }
-            onComplete();
+            const existingCategories = (e.target as IDBRequest<Category[]>).result;
+            const existingCategoryNames = new Set(existingCategories.map(c => c.name));
+            
+            let addedNew = false;
+            defaultCategories.forEach(name => {
+                if (!existingCategoryNames.has(name)) {
+                    categoryStore.add({ name });
+                    addedNew = true;
+                }
+            });
+            onCheckComplete();
         };
         catRequest.onerror = () => reject(catRequest.error);
         
@@ -99,7 +105,7 @@ async function populateInitialData(db: IDBDatabase): Promise<void> {
             if (count === 0) {
                 settingsStore.add({ id: 1, monthlyBudget: 1000 });
             }
-            onComplete();
+            onCheckComplete();
         };
         settingsRequest.onerror = () => reject(settingsRequest.error);
     });

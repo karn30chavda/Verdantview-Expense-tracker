@@ -37,7 +37,7 @@ const categorySchema = z.object({
   name: z.string().min(2, { message: "Category name must be at least 2 characters." }),
 });
 
-const defaultCategories = ['Groceries', 'Dining', 'Travel', 'Utilities', 'Shopping', 'Other'];
+const defaultCategories = ['Groceries', 'Dining', 'Travel', 'Utilities', 'Shopping', 'Food', 'Medicine', 'Other'];
 
 export default function SettingsPage() {
   const router = useRouter();

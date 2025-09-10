@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet';
 import { Button } from '@/components/ui/button';
 import { Menu, Leaf } from 'lucide-react';
 
@@ -28,11 +28,15 @@ export function MobileNav() {
         </Button>
       </SheetTrigger>
       <SheetContent side="left">
-        <Link href="/" className="mb-6 flex items-center" onClick={() => setOpen(false)}>
-          <Leaf className="mr-2 h-6 w-6 text-primary" />
-          <span className="font-bold">VerdantView</span>
-        </Link>
-        <div className="flex flex-col space-y-3">
+        <SheetHeader>
+            <SheetTitle asChild>
+                <Link href="/" className="mb-6 flex items-center" onClick={() => setOpen(false)}>
+                <Leaf className="mr-2 h-6 w-6 text-primary" />
+                <span className="font-bold">VerdantView</span>
+                </Link>
+            </SheetTitle>
+        </SheetHeader>
+        <div className="flex flex-col space-y-3 mt-6">
           {navLinks.map(({ href, label }) => (
             <Link
               key={href}

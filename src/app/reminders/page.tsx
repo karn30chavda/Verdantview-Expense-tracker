@@ -20,11 +20,10 @@ import { useToast } from '@/hooks/use-toast';
 
 const reminderSchema = z.object({
   title: z.string().min(2, { message: 'Title must be at least 2 characters.' }),
-  amount: z.coerce.number().positive({ message: 'Amount must be a positive number.' }),
   date: z.date({ required_error: 'A date is required.' }),
 });
 
-async function scheduleReminderNotifications(title: string, date: Date, amount: number) {
+async function scheduleReminderNotifications(title: string, date: Date) {
     if (typeof window !== 'undefined' && 'serviceWorker' in navigator && Notification.permission === 'granted') {
         const registration = await navigator.serviceWorker.ready;
         // Immediate notification for testing
@@ -33,7 +32,7 @@ async function scheduleReminderNotifications(title: string, date: Date, amount: 
             payload: {
                 title: `Reminder Added: ${title}`,
                 options: {
-                    body: `Due: ${format(date, 'PPP')} for ${new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR' }).format(amount)}`,
+                    body: `Due: ${format(date, 'PPP')}`,
                 },
                 schedule: { at: Date.now() + 1000 } // Schedule for 1 second in the future for "instant" feel
             }
@@ -47,7 +46,7 @@ async function scheduleReminderNotifications(title: string, date: Date, amount: 
               payload: {
                   title: `Upcoming: ${title}`,
                   options: {
-                      body: `Due tomorrow for ${new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR' }).format(amount)}`,
+                      body: `Due tomorrow.`,
                   },
                   schedule: { at: oneDayBefore.getTime() }
               }
@@ -60,7 +59,7 @@ async function scheduleReminderNotifications(title: string, date: Date, amount: 
             payload: {
                 title: `Due Today: ${title}`,
                 options: {
-                    body: `Payment of ${new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR' }).format(amount)} is due today.`,
+                    body: `Payment is due today.`,
                 },
                 schedule: { at: date.getTime() }
             }
@@ -76,7 +75,7 @@ export default function RemindersPage() {
 
   const form = useForm<z.infer<typeof reminderSchema>>({
     resolver: zodResolver(reminderSchema),
-    defaultValues: { title: '', amount: undefined },
+    defaultValues: { title: '' },
   });
 
   const fetchReminders = useCallback(async () => {
@@ -111,17 +110,16 @@ export default function RemindersPage() {
     try {
       const newReminder: Omit<Reminder, 'id'> = {
         title: values.title,
-        amount: values.amount,
         date: values.date.toISOString(),
       };
       await addReminder(newReminder);
       toast({ title: 'Reminder added and scheduled!' });
       
       if (notificationPermission === 'granted') {
-        await scheduleReminderNotifications(values.title, values.date, values.amount);
+        await scheduleReminderNotifications(values.title, values.date);
       }
       
-      form.reset({ title: '', amount: undefined, date: undefined });
+      form.reset({ title: '', date: undefined });
       fetchReminders();
     } catch (error) {
       toast({ title: 'Failed to add reminder.', variant: 'destructive' });
@@ -178,19 +176,6 @@ export default function RemindersPage() {
                   />
                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <FormField
-                      control={form.control}
-                      name="amount"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Amount</FormLabel>
-                          <FormControl>
-                            <Input type="number" step="0.01" placeholder="0.00" {...field} />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                    <FormField
                         control={form.control}
                         name="date"
                         render={({ field }) => (
@@ -241,7 +226,7 @@ export default function RemindersPage() {
                     <li key={reminder.id} className="flex items-center justify-between p-4 bg-muted/50 rounded-lg">
                       <div className="flex items-center gap-4">
                         <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary/10 text-primary">
-                          <IndianRupee className="h-5 w-5"/>
+                          <Bell className="h-5 w-5"/>
                         </div>
                         <div>
                             <p className="font-medium">{reminder.title}</p>
@@ -249,7 +234,6 @@ export default function RemindersPage() {
                         </div>
                       </div>
                       <div className="flex items-center gap-4">
-                        <p className="font-semibold text-lg">{new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR' }).format(reminder.amount)}</p>
                         <Button variant="ghost" size="icon" onClick={() => reminder.id && handleDeleteReminder(reminder.id)}>
                             <Trash2 className="h-4 w-4 text-destructive" />
                         </Button>

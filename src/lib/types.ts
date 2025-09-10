@@ -15,7 +15,6 @@ export interface Category {
 export interface Reminder {
   id?: number;
   title: string;
-  amount: number;
   date: string; // ISO string format
 }
 

@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
@@ -75,7 +76,7 @@ export default function RemindersPage() {
 
   const form = useForm<z.infer<typeof reminderSchema>>({
     resolver: zodResolver(reminderSchema),
-    defaultValues: { title: '' },
+    defaultValues: { title: '', amount: undefined },
   });
 
   const fetchReminders = useCallback(async () => {
@@ -267,3 +268,5 @@ export default function RemindersPage() {
     </div>
   );
 }
+
+    

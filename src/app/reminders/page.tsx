@@ -15,7 +15,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { Calendar } from '@/components/ui/calendar';
 import { cn } from '@/lib/utils';
 import { format } from 'date-fns';
-import { Calendar as CalendarIcon, Trash2, Bell, BellOff, Loader2, IndianRupee } from 'lucide-react';
+import { Calendar as CalendarIcon, Trash2, Bell, BellOff, Loader2 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 
 const reminderSchema = z.object({
@@ -137,7 +137,7 @@ export default function RemindersPage() {
   };
 
   return (
-    <div className="container mx-auto max-w-2xl py-10">
+    <div className="container mx-auto max-w-4xl py-10">
       <div className="flex flex-col md:flex-row md:items-center md:justify-between mb-8">
         <div>
           <h1 className="text-3xl font-bold">Reminders</h1>
@@ -162,29 +162,28 @@ export default function RemindersPage() {
             </CardHeader>
             <CardContent>
               <Form {...form}>
-                <form onSubmit={form.handleSubmit(handleAddReminder)} className="space-y-6">
-                  <FormField
-                    control={form.control}
-                    name="title"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Title</FormLabel>
-                        <FormControl><Input placeholder="e.g., Electricity Bill" {...field} /></FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <form onSubmit={form.handleSubmit(handleAddReminder)} className="flex flex-col sm:flex-row items-start gap-4">
+                    <FormField
+                      control={form.control}
+                      name="title"
+                      render={({ field }) => (
+                        <FormItem className="flex-grow w-full">
+                          <FormLabel className="sr-only">Title</FormLabel>
+                          <FormControl><Input placeholder="e.g., Electricity Bill" {...field} /></FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
                     <FormField
                         control={form.control}
                         name="date"
                         render={({ field }) => (
-                        <FormItem className="flex flex-col">
-                            <FormLabel>Due Date</FormLabel>
+                        <FormItem className="flex-grow w-full sm:w-auto">
+                            <FormLabel className="sr-only">Due Date</FormLabel>
                             <Popover>
                             <PopoverTrigger asChild>
                                 <FormControl>
-                                <Button variant={'outline'} className={cn('pl-3 text-left font-normal', !field.value && 'text-muted-foreground')}>
+                                <Button variant={'outline'} className={cn('w-full sm:w-[240px] pl-3 text-left font-normal', !field.value && 'text-muted-foreground')}>
                                     {field.value ? format(field.value, 'PPP') : <span>Pick a date</span>}
                                     <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
                                 </Button>
@@ -198,7 +197,6 @@ export default function RemindersPage() {
                         </FormItem>
                         )}
                     />
-                 </div>
                   <Button type="submit" className="w-full sm:w-auto" disabled={form.formState.isSubmitting}>
                     {form.formState.isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                     Add Reminder
@@ -252,5 +250,3 @@ export default function RemindersPage() {
     </div>
   );
 }
-
-    

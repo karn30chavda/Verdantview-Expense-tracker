@@ -4,7 +4,7 @@ import type { Expense, Category, Reminder, AppSettings } from './types';
 import { startOfDay } from 'date-fns';
 
 const DB_NAME = 'VerdantViewDB';
-const DB_VERSION = 1;
+const DB_VERSION = 2; // Incremented version to trigger onupgradeneeded
 
 let dbPromise: Promise<IDBDatabase> | null = null;
 
@@ -41,6 +41,15 @@ function getDB(): Promise<IDBDatabase> {
         if (!db.objectStoreNames.contains('reminders')) {
           const reminderStore = db.createObjectStore('reminders', { keyPath: 'id', autoIncrement: true });
           reminderStore.createIndex('date', 'date', { unique: false });
+        } else {
+            // If the store exists, check if the index exists
+            const transaction = (event.target as IDBOpenDBRequest).transaction;
+            if (transaction) {
+                const reminderStore = transaction.objectStore('reminders');
+                if (!reminderStore.indexNames.contains('date')) {
+                    reminderStore.createIndex('date', 'date', { unique: false });
+                }
+            }
         }
         if (!db.objectStoreNames.contains('settings')) {
           db.createObjectStore('settings', { keyPath: 'id' });

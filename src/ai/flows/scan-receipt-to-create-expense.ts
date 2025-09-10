@@ -22,10 +22,10 @@ export type ScanReceiptToCreateExpenseInput = z.infer<
 >;
 
 const ScanReceiptToCreateExpenseOutputSchema = z.object({
-  amount: z.number().describe('The amount of the expense.'),
-  date: z.string().describe('The date of the expense (YYYY-MM-DD).'),
-  category: z.string().describe('The category of the expense.'),
-  vendor: z.string().describe('The name of the vendor.'),
+  amount: z.number().describe('The total amount of the expense.'),
+  date: z.string().describe('The date of the expense (YYYY-MM-DD). If not found, use today\'s date.'),
+  category: z.string().describe('The category of the expense (e.g., Groceries, Dining, Travel). If not clear, use "Other".'),
+  vendor: z.string().describe('The name of the vendor or store.'),
 });
 export type ScanReceiptToCreateExpenseOutput = z.infer<
   typeof ScanReceiptToCreateExpenseOutputSchema
@@ -41,13 +41,13 @@ const prompt = ai.definePrompt({
   name: 'scanReceiptToCreateExpensePrompt',
   input: {schema: ScanReceiptToCreateExpenseInputSchema},
   output: {schema: ScanReceiptToCreateExpenseOutputSchema},
-  prompt: `You are an expert AI assistant that extracts expense details from receipt images.
+  prompt: `You are an expert AI assistant that extracts expense details from receipt images or documents.
 
   Analyze the provided receipt image and extract the following information:
-  - Amount: The total amount of the expense.
-  - Date: The date of the expense (YYYY-MM-DD).
-  - Category: The category of the expense (e.g., Groceries, Dining, Travel).
-  - Vendor: The name of the vendor.
+  - Amount: The total amount of the expense. This is usually labeled "Total", "Grand Total", or "Amount Due".
+  - Date: The date of the expense. Format it as YYYY-MM-DD. If you cannot find a date, use the current date.
+  - Category: Infer a likely category for the expense from the vendor name or items (e.g., Groceries, Dining, Travel, Utilities). If you are unsure, default to "Other".
+  - Vendor: The name of the vendor, store, or merchant.
 
   Return the extracted information in JSON format.
 

@@ -4,6 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardFooter } from '@/componen
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
 import { scanExpenses } from '@/ai/flows/scan-expenses-flow';
+import { scanReceiptToCreateExpense } from '@/ai/flows/scan-receipt-to-create-expense';
 import { useExpenses } from '@/hooks/use-expenses';
 import { Loader2, Upload, Camera, Trash2, Calendar as CalendarIcon, IndianRupee, ImageUp, CircleX, RefreshCw } from 'lucide-react';
 import { useRouter } from 'next/navigation';
@@ -19,6 +20,7 @@ import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import Image from 'next/image';
+import { ExpenseForm } from '@/components/expense-form';
 
 type EditableExpense = Omit<Expense, 'id'>;
 
@@ -35,6 +37,7 @@ export default function ExpenseScanner() {
   const router = useRouter();
   const { toast } = useToast();
   const [editableExpenses, setEditableExpenses] = useState<EditableExpense[]>([]);
+  const [singleExpense, setSingleExpense] = useState<Partial<Expense> | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
@@ -43,7 +46,8 @@ export default function ExpenseScanner() {
   const [hasCameraPermission, setHasCameraPermission] = useState<boolean | null>(null);
   const [openDatePickerIndex, setOpenDatePickerIndex] = useState<number | null>(null);
   const [activeTab, setActiveTab] = useState('upload');
-  
+  const [scanMode, setScanMode] = useState('line-items');
+
   const stopCamera = useCallback(() => {
     if (videoRef.current && videoRef.current.srcObject) {
         (videoRef.current.srcObject as MediaStream).getTracks().forEach(track => track.stop());
@@ -86,11 +90,24 @@ export default function ExpenseScanner() {
   
   const handleTabChange = (value: string) => {
       setActiveTab(value);
+      resetScanState();
+  }
+  
+  const handleScanModeChange = (value: string) => {
+      setScanMode(value);
+      resetScanState();
+  }
+  
+  const resetScanState = () => {
       setEditableExpenses([]);
+      setSingleExpense(null);
       setImagePreview(null);
       if(fileInputRef.current) {
         fileInputRef.current.value = '';
-    }
+      }
+      if(activeTab === 'camera' && scanMode !== 'receipt') {
+          startCamera();
+      }
   }
 
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -100,6 +117,7 @@ export default function ExpenseScanner() {
       reader.onloadend = () => {
         setImagePreview(reader.result as string);
         setEditableExpenses([]);
+        setSingleExpense(null);
       };
       reader.readAsDataURL(file);
     }
@@ -111,29 +129,45 @@ export default function ExpenseScanner() {
         return;
     }
     if (!imagePreview) {
-        toast({ variant: 'destructive', title: 'No Image', description: 'Please select an image to scan.' });
+        toast({ variant: 'destructive', title: 'No Image', description: 'Please select an image or PDF to scan.' });
         return;
     }
     setIsLoading(true);
-    setEditableExpenses([]);
+    resetScanState();
+    setImagePreview(imagePreview); // Keep the preview
+    
     try {
-        const result = await scanExpenses({ photoDataUri: imagePreview });
-        if (result.expenses.length === 0) {
-          toast({ title: 'No Expenses Found', description: 'The AI could not find any expenses in the image.' });
-        } else {
-            const otherCategory = categories.find(c => c.name === 'Other');
-            const newEditableExpenses: EditableExpense[] = result.expenses.map(exp => ({
-                title: exp.title,
-                amount: exp.amount,
-                date: new Date().toISOString(),
-                category: otherCategory?.name || 'Other',
-                paymentMode: 'Other',
-            }));
-            setEditableExpenses(newEditableExpenses);
+        if (scanMode === 'line-items') {
+            const result = await scanExpenses({ photoDataUri: imagePreview });
+            if (result.expenses.length === 0) {
+              toast({ title: 'No Expenses Found', description: 'The AI could not find any expenses in the image.' });
+            } else {
+                const otherCategory = categories.find(c => c.name === 'Other');
+                const newEditableExpenses: EditableExpense[] = result.expenses.map(exp => ({
+                    title: exp.title,
+                    amount: exp.amount,
+                    date: new Date().toISOString(),
+                    category: otherCategory?.name || 'Other',
+                    paymentMode: 'Other',
+                }));
+                setEditableExpenses(newEditableExpenses);
+            }
+        } else { // scanMode === 'receipt'
+            const result = await scanReceiptToCreateExpense({ photoDataUri: imagePreview });
+            
+            const categoryExists = categories.some(c => c.name.toLowerCase() === result.category.toLowerCase());
+
+            const expenseData: Partial<Expense> = {
+                title: result.vendor || 'Scanned Expense',
+                amount: result.amount,
+                date: result.date ? new Date(result.date).toISOString() : new Date().toISOString(),
+                category: categoryExists ? result.category : 'Other',
+            };
+            setSingleExpense(expenseData);
         }
     } catch (error) {
         console.error(error);
-        toast({ variant: 'destructive', title: 'Scan Failed', description: 'Could not process the image. The model may be unavailable or an API key may be missing.' });
+        toast({ variant: 'destructive', title: 'Scan Failed', description: 'Could not process the document. The model may be unavailable or an API key may be missing.' });
     } finally {
         setIsLoading(false);
     }
@@ -151,6 +185,7 @@ export default function ExpenseScanner() {
         setImagePreview(dataUri);
         stopCamera();
         setEditableExpenses([]);
+        setSingleExpense(null);
       }
     }
   };
@@ -158,6 +193,7 @@ export default function ExpenseScanner() {
   const resetImage = () => {
     setImagePreview(null);
     setEditableExpenses([]);
+    setSingleExpense(null);
     if(fileInputRef.current) {
         fileInputRef.current.value = '';
     }
@@ -189,203 +225,279 @@ export default function ExpenseScanner() {
   const removeExpense = (index: number) => {
       setEditableExpenses(editableExpenses.filter((_, i) => i !== index));
   };
+  
+  const handleSaveScannedReceipt = () => {
+    toast({ title: 'Success', description: 'Expense added successfully.' });
+    router.push('/expenses');
+  };
 
   return (
     <div className="space-y-8">
       <h1 className="text-3xl font-bold tracking-tight">Scan Expenses</h1>
-      <div className="grid gap-8 md:grid-cols-1 lg:grid-cols-2">
-        <Card className="lg:col-span-1">
-          <CardHeader>
-            <CardTitle>1. Provide an Image</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-6">
-            <Tabs value={activeTab} onValueChange={handleTabChange}>
-                <TabsList className="grid w-full grid-cols-2">
-                    <TabsTrigger value="upload" className="flex items-center gap-2">
-                        <Upload className="h-4 w-4"/> Upload File
-                    </TabsTrigger>
-                    <TabsTrigger value="camera" className="flex items-center gap-2">
-                        <Camera className="h-4 w-4"/> Use Camera
-                    </TabsTrigger>
-                </TabsList>
-                <TabsContent value="upload" className="mt-4">
-                    {imagePreview ? (
-                        <div className="relative">
-                            <Image src={imagePreview} alt="Expense list preview" className="rounded-md max-h-80 w-auto mx-auto" width={400} height={600} />
-                            <Button variant="destructive" size="icon" className="absolute top-2 right-2" onClick={resetImage}>
-                                <CircleX className="h-5 w-5" />
-                            </Button>
-                        </div>
-                    ) : (
-                        <div className="border-2 border-dashed border-muted-foreground/30 rounded-lg p-8 flex flex-col items-center justify-center text-center h-64">
-                            <ImageUp className="h-12 w-12 text-muted-foreground"/>
-                            <h3 className="mt-4 text-lg font-medium">Click to upload or drag and drop</h3>
-                            <p className="mt-1 text-sm text-muted-foreground">PNG, JPG, or other image formats</p>
-                            <Button type="button" variant="outline" className="mt-4" onClick={() => fileInputRef.current?.click()}>
-                                Browse Files
-                            </Button>
-                            <Input 
-                                ref={fileInputRef} 
-                                type="file" 
-                                className="hidden" 
-                                accept="image/*"
-                                onChange={handleFileChange}
-                            />
-                        </div>
-                    )}
-                </TabsContent>
-                <TabsContent value="camera" className="mt-4">
-                     <div className="space-y-2 bg-muted rounded-md p-2">
+      
+      <Tabs value={scanMode} onValueChange={handleScanModeChange} className="w-full">
+        <TabsList className="grid w-full grid-cols-2">
+            <TabsTrigger value="line-items">Scan Line Items</TabsTrigger>
+            <TabsTrigger value="receipt">Scan Full Receipt</TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="line-items" className="mt-6">
+           <div className="grid gap-8 md:grid-cols-1 lg:grid-cols-2">
+            <Card className="lg:col-span-1">
+              <CardHeader>
+                <CardTitle>1. Provide an Image</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-6">
+                <Tabs value={activeTab} onValueChange={handleTabChange}>
+                    <TabsList className="grid w-full grid-cols-2">
+                        <TabsTrigger value="upload" className="flex items-center gap-2">
+                            <Upload className="h-4 w-4"/> Upload File
+                        </TabsTrigger>
+                        <TabsTrigger value="camera" className="flex items-center gap-2">
+                            <Camera className="h-4 w-4"/> Use Camera
+                        </TabsTrigger>
+                    </TabsList>
+                    <TabsContent value="upload" className="mt-4">
                         {imagePreview ? (
                             <div className="relative">
-                                <Image src={imagePreview} alt="Captured expense list" className="rounded-md w-full" width={1920} height={1080} />
-                                <Button variant="secondary" size="icon" className="absolute top-2 right-2" onClick={resetImage}>
-                                    <RefreshCw className="h-5 w-5" />
+                                <Image src={imagePreview} alt="Expense list preview" className="rounded-md max-h-80 w-auto mx-auto" width={400} height={600} />
+                                <Button variant="destructive" size="icon" className="absolute top-2 right-2" onClick={resetImage}>
+                                    <CircleX className="h-5 w-5" />
                                 </Button>
                             </div>
                         ) : (
-                            <>
-                                <video ref={videoRef} className="w-full aspect-video rounded-md bg-black" autoPlay muted playsInline />
-                                {hasCameraPermission === false && (
-                                    <Alert variant="destructive">
-                                        <AlertTitle>Camera Access Required</AlertTitle>
-                                        <AlertDescription>
-                                            Please allow camera access to use this feature. You might need to refresh the page.
-                                        </AlertDescription>
-                                    </Alert>
-                                )}
-                                <Button onClick={handleCapture} className="w-full" disabled={!hasCameraPermission}>
-                                    <Camera className="mr-2 h-4 w-4"/> Capture Photo
+                            <div className="border-2 border-dashed border-muted-foreground/30 rounded-lg p-8 flex flex-col items-center justify-center text-center h-64">
+                                <ImageUp className="h-12 w-12 text-muted-foreground"/>
+                                <h3 className="mt-4 text-lg font-medium">Click to upload or drag and drop</h3>
+                                <p className="mt-1 text-sm text-muted-foreground">PNG, JPG, or other image formats</p>
+                                <Button type="button" variant="outline" className="mt-4" onClick={() => fileInputRef.current?.click()}>
+                                    Browse Files
                                 </Button>
-                            </>
+                                <Input 
+                                    ref={fileInputRef} 
+                                    type="file" 
+                                    className="hidden" 
+                                    accept="image/*"
+                                    onChange={handleFileChange}
+                                />
+                            </div>
                         )}
-                    </div>
-                </TabsContent>
-            </Tabs>
-          </CardContent>
-          <CardFooter>
-            <Button onClick={handleScanImage} disabled={!imagePreview || isLoading} className="w-full">
-              {isLoading ? <Loader2 className="mr-2 animate-spin" /> : null}
-              Scan Image
-            </Button>
-          </CardFooter>
-        </Card>
-        <Card className="lg:col-span-1">
-          <CardHeader>
-            <CardTitle>2. Review and Save</CardTitle>
-          </CardHeader>
-          <CardContent className="min-h-[350px]">
-            {isLoading ? (
-                <div className="flex items-center justify-center h-full">
-                    <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-                </div>
-            ) : editableExpenses.length > 0 ? (
-              <Accordion type="multiple" className="w-full space-y-2">
-                {editableExpenses.map((expense, index) => (
-                  <AccordionItem value={`item-${index}`} key={index} className="border rounded-md px-4">
-                    <AccordionTrigger>
-                        <div className="flex justify-between w-full pr-4">
-                            <span className="font-medium truncate max-w-[150px]">{expense.title}</span>
-                            <span className="flex items-center font-semibold shrink-0">
-                                <IndianRupee className="h-4 w-4 mr-1" />
-                                {formatCurrency(expense.amount)}
-                            </span>
+                    </TabsContent>
+                    <TabsContent value="camera" className="mt-4">
+                         <div className="space-y-2 bg-muted rounded-md p-2">
+                            {imagePreview ? (
+                                <div className="relative">
+                                    <Image src={imagePreview} alt="Captured expense list" className="rounded-md w-full" width={1920} height={1080} />
+                                    <Button variant="secondary" size="icon" className="absolute top-2 right-2" onClick={resetImage}>
+                                        <RefreshCw className="h-5 w-5" />
+                                    </Button>
+                                </div>
+                            ) : (
+                                <>
+                                    <video ref={videoRef} className="w-full aspect-video rounded-md bg-black" autoPlay muted playsInline />
+                                    {hasCameraPermission === false && (
+                                        <Alert variant="destructive">
+                                            <AlertTitle>Camera Access Required</AlertTitle>
+                                            <AlertDescription>
+                                                Please allow camera access to use this feature. You might need to refresh the page.
+                                            </AlertDescription>
+                                        </Alert>
+                                    )}
+                                    <Button onClick={handleCapture} className="w-full" disabled={!hasCameraPermission}>
+                                        <Camera className="mr-2 h-4 w-4"/> Capture Photo
+                                    </Button>
+                                </>
+                            )}
                         </div>
-                    </AccordionTrigger>
-                    <AccordionContent className="pt-2">
-                        <div className="space-y-4">
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                                <div className="space-y-2">
-                                    <Label htmlFor={`title-${index}`}>Title</Label>
-                                    <Input id={`title-${index}`} value={expense.title} onChange={(e) => handleExpenseChange(index, 'title', e.target.value)} />
+                    </TabsContent>
+                </Tabs>
+              </CardContent>
+              <CardFooter>
+                <Button onClick={handleScanImage} disabled={!imagePreview || isLoading} className="w-full">
+                  {isLoading ? <Loader2 className="mr-2 animate-spin" /> : null}
+                  Scan Image
+                </Button>
+              </CardFooter>
+            </Card>
+            <Card className="lg:col-span-1">
+              <CardHeader>
+                <CardTitle>2. Review and Save</CardTitle>
+              </CardHeader>
+              <CardContent className="min-h-[350px]">
+                {isLoading ? (
+                    <div className="flex items-center justify-center h-full">
+                        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+                    </div>
+                ) : editableExpenses.length > 0 ? (
+                  <Accordion type="multiple" className="w-full space-y-2">
+                    {editableExpenses.map((expense, index) => (
+                      <AccordionItem value={`item-${index}`} key={index} className="border rounded-md px-4">
+                        <AccordionTrigger>
+                            <div className="flex justify-between w-full pr-4">
+                                <span className="font-medium truncate max-w-[150px]">{expense.title}</span>
+                                <span className="flex items-center font-semibold shrink-0">
+                                    <IndianRupee className="h-4 w-4 mr-1" />
+                                    {formatCurrency(expense.amount)}
+                                </span>
+                            </div>
+                        </AccordionTrigger>
+                        <AccordionContent className="pt-2">
+                            <div className="space-y-4">
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                    <div className="space-y-2">
+                                        <Label htmlFor={`title-${index}`}>Title</Label>
+                                        <Input id={`title-${index}`} value={expense.title} onChange={(e) => handleExpenseChange(index, 'title', e.target.value)} />
+                                    </div>
+                                    <div className="space-y-2">
+                                        <Label htmlFor={`amount-${index}`}>Amount</Label>
+                                        <Input id={`amount-${index}`} type="number" value={expense.amount} onChange={(e) => handleExpenseChange(index, 'amount', parseFloat(e.target.value) || 0)} />
+                                    </div>
                                 </div>
-                                <div className="space-y-2">
-                                    <Label htmlFor={`amount-${index}`}>Amount</Label>
-                                    <Input id={`amount-${index}`} type="number" value={expense.amount} onChange={(e) => handleExpenseChange(index, 'amount', parseFloat(e.target.value) || 0)} />
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                    <div className="space-y-2">
+                                         <Label>Date</Label>
+                                        <Popover open={openDatePickerIndex === index} onOpenChange={(isOpen) => setOpenDatePickerIndex(isOpen ? index : null)}>
+                                            <PopoverTrigger asChild>
+                                                <Button
+                                                    variant="outline"
+                                                    className={cn('w-full justify-start text-left font-normal',!expense.date && 'text-muted-foreground')}
+                                                >
+                                                    <CalendarIcon className="mr-2 h-4 w-4" />
+                                                    {expense.date ? format(new Date(expense.date), 'PPP') : <span>Pick a date</span>}
+                                                </Button>
+                                            </PopoverTrigger>
+                                            <PopoverContent className="w-auto p-0">
+                                                <Calendar
+                                                    mode="single"
+                                                    selected={new Date(expense.date)}
+                                                    onSelect={(date) => {
+                                                        handleExpenseChange(index, 'date', date?.toISOString() || '');
+                                                        setOpenDatePickerIndex(null);
+                                                    }}
+                                                    initialFocus
+                                                />
+                                            </PopoverContent>
+                                        </Popover>
+                                    </div>
+                                    <div className="space-y-2">
+                                        <Label htmlFor={`category-${index}`}>Category</Label>
+                                        <Select value={expense.category} onValueChange={(value) => handleExpenseChange(index, 'category', value)}>
+                                            <SelectTrigger id={`category-${index}`}>
+                                                <SelectValue placeholder="Select a category" />
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                                {categories.map((cat) => (
+                                                    <SelectItem key={cat.id} value={cat.name}>
+                                                        {cat.name}
+                                                    </SelectItem>
+                                                ))}
+                                            </SelectContent>
+                                        </Select>
+                                    </div>
+                                </div>
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                    <div className="space-y-2">
+                                        <Label>Payment Mode</Label>
+                                        <Select value={expense.paymentMode} onValueChange={(value: any) => handleExpenseChange(index, 'paymentMode', value)}>
+                                            <SelectTrigger>
+                                                <SelectValue placeholder="Select a mode" />
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                                <SelectItem value="Cash">Cash</SelectItem>
+                                                <SelectItem value="Card">Card</SelectItem>
+                                                <SelectItem value="Online">Online</SelectItem>
+                                                <SelectItem value="Other">Other</SelectItem>
+                                            </SelectContent>
+                                        </Select>
+                                    </div>
+                                </div>
+                                 <div className="flex justify-end">
+                                    <Button variant="ghost" size="icon" onClick={() => removeExpense(index)}>
+                                        <Trash2 className="h-4 w-4 text-destructive" />
+                                    </Button>
                                 </div>
                             </div>
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                                <div className="space-y-2">
-                                     <Label>Date</Label>
-                                    <Popover open={openDatePickerIndex === index} onOpenChange={(isOpen) => setOpenDatePickerIndex(isOpen ? index : null)}>
-                                        <PopoverTrigger asChild>
-                                            <Button
-                                                variant="outline"
-                                                className={cn('w-full justify-start text-left font-normal',!expense.date && 'text-muted-foreground')}
-                                            >
-                                                <CalendarIcon className="mr-2 h-4 w-4" />
-                                                {expense.date ? format(new Date(expense.date), 'PPP') : <span>Pick a date</span>}
-                                            </Button>
-                                        </PopoverTrigger>
-                                        <PopoverContent className="w-auto p-0">
-                                            <Calendar
-                                                mode="single"
-                                                selected={new Date(expense.date)}
-                                                onSelect={(date) => {
-                                                    handleExpenseChange(index, 'date', date?.toISOString() || '');
-                                                    setOpenDatePickerIndex(null);
-                                                }}
-                                                initialFocus
-                                            />
-                                        </PopoverContent>
-                                    </Popover>
-                                </div>
-                                <div className="space-y-2">
-                                    <Label htmlFor={`category-${index}`}>Category</Label>
-                                    <Select value={expense.category} onValueChange={(value) => handleExpenseChange(index, 'category', value)}>
-                                        <SelectTrigger id={`category-${index}`}>
-                                            <SelectValue placeholder="Select a category" />
-                                        </SelectTrigger>
-                                        <SelectContent>
-                                            {categories.map((cat) => (
-                                                <SelectItem key={cat.id} value={cat.name}>
-                                                    {cat.name}
-                                                </SelectItem>
-                                            ))}
-                                        </SelectContent>
-                                    </Select>
-                                </div>
-                            </div>
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                                <div className="space-y-2">
-                                    <Label>Payment Mode</Label>
-                                    <Select value={expense.paymentMode} onValueChange={(value: any) => handleExpenseChange(index, 'paymentMode', value)}>
-                                        <SelectTrigger>
-                                            <SelectValue placeholder="Select a mode" />
-                                        </SelectTrigger>
-                                        <SelectContent>
-                                            <SelectItem value="Cash">Cash</SelectItem>
-                                            <SelectItem value="Card">Card</SelectItem>
-                                            <SelectItem value="Online">Online</SelectItem>
-                                            <SelectItem value="Other">Other</SelectItem>
-                                        </SelectContent>
-                                    </Select>
-                                </div>
-                            </div>
-                             <div className="flex justify-end">
-                                <Button variant="ghost" size="icon" onClick={() => removeExpense(index)}>
-                                    <Trash2 className="h-4 w-4 text-destructive" />
+                        </AccordionContent>
+                      </AccordionItem>
+                    ))}
+                  </Accordion>
+                ) : (
+                    <div className="flex flex-col items-center justify-center h-full text-center p-4 border-2 border-dashed rounded-md">
+                         <p className="text-muted-foreground">Scanned expenses will appear here.</p>
+                    </div>
+                )}
+              </CardContent>
+               <CardFooter>
+                    <Button onClick={handleSaveExpenses} disabled={isSaving || editableExpenses.length === 0} className="w-full">
+                      {isSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                      Add {editableExpenses.length > 0 ? `${editableExpenses.length} ` : ''}Expenses
+                    </Button>
+                </CardFooter>
+            </Card>
+           </div>
+        </TabsContent>
+
+        <TabsContent value="receipt" className="mt-6">
+             <div className="grid gap-8 md:grid-cols-1 lg:grid-cols-2">
+                <Card className="lg:col-span-1">
+                  <CardHeader>
+                    <CardTitle>1. Provide a Receipt</CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-6">
+                        {imagePreview ? (
+                            <div className="relative">
+                                <Image src={imagePreview} alt="Receipt preview" className="rounded-md max-h-80 w-auto mx-auto" width={400} height={600} />
+                                <Button variant="destructive" size="icon" className="absolute top-2 right-2" onClick={resetImage}>
+                                    <CircleX className="h-5 w-5" />
                                 </Button>
                             </div>
+                        ) : (
+                            <div className="border-2 border-dashed border-muted-foreground/30 rounded-lg p-8 flex flex-col items-center justify-center text-center h-64">
+                                <ImageUp className="h-12 w-12 text-muted-foreground"/>
+                                <h3 className="mt-4 text-lg font-medium">Click to upload or drag and drop</h3>
+                                <p className="mt-1 text-sm text-muted-foreground">PNG, JPG, PDF, etc.</p>
+                                <Button type="button" variant="outline" className="mt-4" onClick={() => fileInputRef.current?.click()}>
+                                    Browse Files
+                                </Button>
+                                <Input 
+                                    ref={fileInputRef} 
+                                    type="file" 
+                                    className="hidden" 
+                                    accept="image/*,application/pdf"
+                                    onChange={handleFileChange}
+                                />
+                            </div>
+                        )}
+                  </CardContent>
+                  <CardFooter>
+                    <Button onClick={handleScanImage} disabled={!imagePreview || isLoading} className="w-full">
+                      {isLoading ? <Loader2 className="mr-2 animate-spin" /> : null}
+                      Scan Receipt
+                    </Button>
+                  </CardFooter>
+                </Card>
+
+                <Card className="lg:col-span-1">
+                  <CardHeader>
+                    <CardTitle>2. Review and Save</CardTitle>
+                  </CardHeader>
+                  <CardContent className="min-h-[350px]">
+                     {isLoading ? (
+                        <div className="flex items-center justify-center h-full">
+                            <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
                         </div>
-                    </AccordionContent>
-                  </AccordionItem>
-                ))}
-              </Accordion>
-            ) : (
-                <div className="flex flex-col items-center justify-center h-full text-center p-4 border-2 border-dashed rounded-md">
-                     <p className="text-muted-foreground">Scanned expenses will appear here.</p>
-                </div>
-            )}
-          </CardContent>
-           <CardFooter>
-                <Button onClick={handleSaveExpenses} disabled={isSaving || editableExpenses.length === 0} className="w-full">
-                  {isSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-                  Add {editableExpenses.length > 0 ? `${editableExpenses.length} ` : ''}Expenses
-                </Button>
-            </CardFooter>
-        </Card>
-      </div>
+                    ) : singleExpense ? (
+                        <ExpenseForm expense={singleExpense as Expense} onSave={handleSaveScannedReceipt} />
+                    ) : (
+                        <div className="flex flex-col items-center justify-center h-full text-center p-4 border-2 border-dashed rounded-md">
+                            <p className="text-muted-foreground">Scanned receipt details will appear here.</p>
+                        </div>
+                    )}
+                  </CardContent>
+                </Card>
+             </div>
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }

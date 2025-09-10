@@ -71,6 +71,7 @@ export default function RemindersPage() {
   const [reminders, setReminders] = useState<Reminder[]>([]);
   const [loading, setLoading] = useState(true);
   const [notificationPermission, setNotificationPermission] = useState('default');
+  const [isDatePickerOpen, setIsDatePickerOpen] = useState(false);
   const { toast } = useToast();
 
   const form = useForm<z.infer<typeof reminderSchema>>({
@@ -180,7 +181,7 @@ export default function RemindersPage() {
                         render={({ field }) => (
                         <FormItem className="flex-grow w-full sm:w-auto">
                             <FormLabel>Due Date</FormLabel>
-                            <Popover>
+                            <Popover open={isDatePickerOpen} onOpenChange={setIsDatePickerOpen}>
                             <PopoverTrigger asChild>
                                 <FormControl>
                                 <Button variant={'outline'} className={cn('w-full sm:w-[240px] pl-3 text-left font-normal', !field.value && 'text-muted-foreground')}>
@@ -190,7 +191,15 @@ export default function RemindersPage() {
                                 </FormControl>
                             </PopoverTrigger>
                             <PopoverContent className="w-auto p-0" align="start">
-                                <Calendar mode="single" selected={field.value} onSelect={field.onChange} initialFocus />
+                                <Calendar 
+                                  mode="single" 
+                                  selected={field.value} 
+                                  onSelect={(date) => {
+                                    field.onChange(date);
+                                    setIsDatePickerOpen(false);
+                                  }} 
+                                  initialFocus 
+                                />
                             </PopoverContent>
                             </Popover>
                             <FormMessage />

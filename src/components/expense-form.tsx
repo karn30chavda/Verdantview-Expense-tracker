@@ -53,6 +53,7 @@ export function ExpenseForm({ expense, onSave }: ExpenseFormProps) {
   const { toast } = useToast();
   const [categories, setCategories] = useState<Category[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isDatePickerOpen, setIsDatePickerOpen] = useState(false);
 
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
@@ -159,7 +160,7 @@ export function ExpenseForm({ expense, onSave }: ExpenseFormProps) {
             render={({ field }) => (
               <FormItem className="flex flex-col">
                 <FormLabel>Date</FormLabel>
-                <Popover>
+                <Popover open={isDatePickerOpen} onOpenChange={setIsDatePickerOpen}>
                   <PopoverTrigger asChild>
                     <FormControl>
                       <Button
@@ -182,7 +183,10 @@ export function ExpenseForm({ expense, onSave }: ExpenseFormProps) {
                     <Calendar
                       mode="single"
                       selected={field.value}
-                      onSelect={field.onChange}
+                      onSelect={(date) => {
+                        field.onChange(date);
+                        setIsDatePickerOpen(false);
+                      }}
                       disabled={(date) =>
                         date > new Date() || date < new Date('1900-01-01')
                       }

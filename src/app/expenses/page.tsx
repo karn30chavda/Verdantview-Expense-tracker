@@ -174,12 +174,12 @@ function ExpenseListItem({
 const ExpensesSkeleton = () => (
     <Card>
         <CardHeader>
-        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-            <Skeleton className="h-9 w-48" />
-            <div className="flex items-center gap-2">
-                <Skeleton className="h-9 w-24" />
-                <Skeleton className="h-9 w-24" />
-            </div>
+        <div className="flex items-center justify-between gap-4">
+          <Skeleton className="h-9 w-48" />
+          <div className="flex items-center gap-2">
+              <Skeleton className="h-9 w-10 sm:w-32" />
+              <Skeleton className="h-9 w-10 sm:w-24" />
+          </div>
         </div>
         <div className="flex flex-col sm:flex-row gap-2 pt-4">
             <Skeleton className="h-10 w-full sm:w-64" />
@@ -263,20 +263,22 @@ export default function ExpensesPage() {
   return (
     <Card className="w-full">
       <CardHeader>
-        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-            <CardTitle className="text-2xl">Expense History</CardTitle>
-            <div className="flex items-center gap-2">
+        <div className="flex items-center justify-between gap-4">
+          <CardTitle className="text-2xl shrink-0">Expense History</CardTitle>
+          <div className="flex items-center gap-2">
             <Button asChild size="sm">
-                <Link href="/expenses/new">
-                <PlusCircle className="mr-2 h-4 w-4" /> New Expense
-                </Link>
+              <Link href="/expenses/new">
+                <PlusCircle className="h-4 w-4" />
+                <span className="hidden sm:inline-block sm:ml-2">New Expense</span>
+              </Link>
             </Button>
             <Button asChild variant="outline" size="sm">
-                <Link href="/scan">
-                <ScanLine className="mr-2 h-4 w-4" /> Scan
-                </Link>
+              <Link href="/scan">
+                <ScanLine className="h-4 w-4" />
+                <span className="hidden sm:inline-block sm:ml-2">Scan</span>
+              </Link>
             </Button>
-            </div>
+          </div>
         </div>
         <div className="flex flex-col sm:flex-row gap-2 pt-4">
           <div className="relative flex-grow">

@@ -10,11 +10,12 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Badge } from '@/components/ui/badge';
-import { getSettings, updateSettings, getCategories, addCategory, deleteCategory, exportData, importData, clearAllData } from '@/lib/db';
+import { getSettings, updateSettings, getCategories, addCategory, deleteCategory, exportData, clearAllData } from '@/lib/db';
 import type { AppSettings, Category } from '@/lib/types';
 import { useToast } from '@/hooks/use-toast';
 import { Loader2, Trash2, X } from 'lucide-react';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
+import Link from 'next/link';
 
 const budgetSchema = z.object({
   monthlyBudget: z.coerce.number().min(0, { message: "Budget must be a positive number." }),
@@ -109,37 +110,15 @@ export default function SettingsPage() {
     }
   };
 
-  const handleImport = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const fileReader = new FileReader();
-    if (!event.target.files) return;
-    const file = event.target.files[0];
-    if (file) {
-      fileReader.readAsText(file, "UTF-8");
-      fileReader.onload = async e => {
-        try {
-          if (!e.target?.result) throw new Error("File could not be read.");
-          const data = JSON.parse(e.target.result as string);
-          await importData(data);
-          toast({ title: 'Data imported successfully!' });
-          // No longer need to call fetchData or router.refresh() here, the hook will handle it
-        } catch (error) {
-          console.error(error);
-          toast({ title: 'Failed to import data. Please check file format.', variant: 'destructive' });
-        } finally {
-            // Clear the input value to allow re-uploading the same file
-            if(event.target) {
-              event.target.value = '';
-            }
-        }
-      };
-    }
+  const handleExportPdf = () => {
+    toast({ title: 'Feature Coming Soon!', description: 'PDF export functionality will be available in a future update.' });
   };
-
+  
   const handleClearData = async () => {
     try {
       await clearAllData();
       toast({ title: 'All data has been cleared.' });
-       // No longer need to call fetchData or router.refresh() here, the hook will handle it
+       // The useExpenses hook will automatically refetch data
     } catch (error) {
       toast({ title: 'Failed to clear data.', variant: 'destructive' });
     }
@@ -182,13 +161,17 @@ export default function SettingsPage() {
             </Card>
 
             <Card>
-            <CardHeader><CardTitle>Data Management</CardTitle></CardHeader>
+            <CardHeader>
+                <CardTitle>Data Management</CardTitle>
+                <CardDescription>Export, import, or clear your application data.</CardDescription>
+            </CardHeader>
              <CardContent className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                 <Button onClick={handleExport} variant="outline">Export Data (JSON)</Button>
-                <Button asChild variant="outline">
-                <label htmlFor="import-file" className="cursor-pointer w-full h-full flex items-center justify-center">Import Data (JSON)</label>
+                <Button onClick={handleExport} variant="outline">Export (JSON)</Button>
+                <Button onClick={handleExportPdf} variant="outline">Export (PDF)</Button>
+                
+                <Button asChild variant="outline" className="sm:col-span-2">
+                    <Link href="/scan">AI Import (Scan Receipt)</Link>
                 </Button>
-                <Input id="import-file" type="file" accept=".json" onChange={handleImport} className="hidden" />
                 
                 <AlertDialog>
                     <AlertDialogTrigger asChild>

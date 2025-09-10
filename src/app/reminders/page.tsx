@@ -22,6 +22,16 @@ const reminderSchema = z.object({
   date: z.date({ required_error: 'A date is required.' }),
 });
 
+async function showTestNotification(title: string, date: Date) {
+    if (typeof window !== 'undefined' && 'serviceWorker' in navigator && Notification.permission === 'granted') {
+        const registration = await navigator.serviceWorker.ready;
+        registration.showNotification("Reminder Set!", {
+            body: `You will be reminded about "${title}" on ${format(date, 'PPP')}.`,
+            icon: '/icons/icon-192x192.png',
+        });
+    }
+}
+
 export default function RemindersPage() {
   const [reminders, setReminders] = useState<Reminder[]>([]);
   const [loading, setLoading] = useState(true);
@@ -68,6 +78,12 @@ export default function RemindersPage() {
         date: values.date.toISOString(),
       });
       toast({ title: 'Reminder added successfully!' });
+      
+      // Show test notification
+      if (notificationPermission === 'granted') {
+        await showTestNotification(values.title, values.date);
+      }
+      
       form.reset();
       fetchReminders();
     } catch (error) {

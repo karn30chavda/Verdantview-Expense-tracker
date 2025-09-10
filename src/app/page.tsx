@@ -75,11 +75,14 @@ export default function DashboardPage() {
     return Math.min(progress, 100);
   }, [summaries.month, settings]);
 
-  const recentExpenses = expenses.slice(0, 3);
+  const recentExpenses = useMemo(() => expenses.slice(0, 3), [expenses]);
   
-  const upcomingReminder = reminders
-    .filter(r => new Date(r.date) >= new Date())
-    .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())[0];
+  const upcomingReminder = useMemo(() => {
+    const now = new Date();
+    return reminders
+      .filter(r => new Date(r.date) >= now)
+      .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())[0];
+  }, [reminders]);
 
   const chartData = useMemo(() => {
     const days = Array.from({ length: 7 }, (_, i) => subDays(new Date(), i)).reverse();

@@ -45,9 +45,10 @@ const formSchema = z.object({
 
 type ExpenseFormProps = {
   expense?: Expense;
+  onSave?: () => void; // Optional callback for when save is successful
 };
 
-export function ExpenseForm({ expense }: ExpenseFormProps) {
+export function ExpenseForm({ expense, onSave }: ExpenseFormProps) {
   const router = useRouter();
   const { toast } = useToast();
   const [categories, setCategories] = useState<Category[]>([]);
@@ -57,23 +58,35 @@ export function ExpenseForm({ expense }: ExpenseFormProps) {
     resolver: zodResolver(formSchema),
     defaultValues: {
       title: expense?.title || '',
-      amount: expense?.amount || 0,
+      amount: expense?.amount || undefined, // Use undefined for new expenses to avoid controlled/uncontrolled error
       date: expense ? new Date(expense.date) : new Date(),
       category: expense?.category || '',
       paymentMode: expense?.paymentMode || 'Card',
     },
   });
+  
+  useEffect(() => {
+    // Reset form values when the expense prop changes (e.g., in a dialog)
+    form.reset({
+      title: expense?.title || '',
+      amount: expense?.amount || undefined,
+      date: expense ? new Date(expense.date) : new Date(),
+      category: expense?.category || '',
+      paymentMode: expense?.paymentMode || 'Card',
+    });
+  }, [expense, form]);
+
 
   useEffect(() => {
     async function fetchCategories() {
       const fetchedCategories = await getCategories();
       setCategories(fetchedCategories);
-      if (!expense?.category && fetchedCategories.length > 0 && !form.getValues('category')) {
+      if (!form.getValues('category') && fetchedCategories.length > 0) {
         form.setValue('category', fetchedCategories[0].name);
       }
     }
     fetchCategories();
-  }, [expense, form]);
+  }, [form]);
 
   async function onSubmit(values: z.infer<typeof formSchema>) {
     setIsSubmitting(true);
@@ -87,16 +100,21 @@ export function ExpenseForm({ expense }: ExpenseFormProps) {
         await updateExpense(expenseData);
         toast({ title: "Expense updated successfully!" });
       } else {
+         const { ...rest } = values;
         const expenseData: Omit<Expense, 'id'> = {
-            ...values,
+            ...rest,
             date: values.date.toISOString(),
         };
         await addExpense(expenseData);
         toast({ title: "Expense added successfully!" });
       }
       
-      router.push('/expenses');
-      router.refresh();
+      if (onSave) {
+        onSave();
+      } else {
+        router.push('/expenses');
+        router.refresh();
+      }
     } catch (error) {
       console.error("Failed to save expense:", error);
       toast({ title: "Error", description: "Failed to save the expense. Please try again.", variant: 'destructive'});

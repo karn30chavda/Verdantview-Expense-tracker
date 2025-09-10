@@ -4,7 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardFooter } from '@/componen
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
 import { scanExpenses } from '@/ai/flows/scan-expenses-flow';
-import { scanReceiptToCreateExpense } from '@/ai/flows/scan-receipt-to-create-expense';
+import { scanDocumentForExpenses } from '@/ai/flows/scan-document-for-expenses';
 import { useExpenses } from '@/hooks/use-expenses';
 import { Loader2, Upload, Camera, Trash2, Calendar as CalendarIcon, IndianRupee, ImageUp, CircleX, RefreshCw } from 'lucide-react';
 import { useRouter } from 'next/navigation';
@@ -20,7 +20,6 @@ import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import Image from 'next/image';
-import { ExpenseForm } from '@/components/expense-form';
 
 type EditableExpense = Omit<Expense, 'id'>;
 
@@ -37,7 +36,6 @@ export default function ExpenseScanner() {
   const router = useRouter();
   const { toast } = useToast();
   const [editableExpenses, setEditableExpenses] = useState<EditableExpense[]>([]);
-  const [singleExpense, setSingleExpense] = useState<Partial<Expense> | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
@@ -100,12 +98,11 @@ export default function ExpenseScanner() {
   
   const resetScanState = () => {
       setEditableExpenses([]);
-      setSingleExpense(null);
       setImagePreview(null);
       if(fileInputRef.current) {
         fileInputRef.current.value = '';
       }
-      if(activeTab === 'camera' && scanMode !== 'receipt') {
+      if(activeTab === 'camera') {
           startCamera();
       }
   }
@@ -117,7 +114,6 @@ export default function ExpenseScanner() {
       reader.onloadend = () => {
         setImagePreview(reader.result as string);
         setEditableExpenses([]);
-        setSingleExpense(null);
       };
       reader.readAsDataURL(file);
     }
@@ -129,42 +125,32 @@ export default function ExpenseScanner() {
         return;
     }
     if (!imagePreview) {
-        toast({ variant: 'destructive', title: 'No Image', description: 'Please select an image or PDF to scan.' });
+        toast({ variant: 'destructive', title: 'No Image or PDF', description: 'Please select a document to scan.' });
         return;
     }
     setIsLoading(true);
-    resetScanState();
-    setImagePreview(imagePreview); // Keep the preview
+    setEditableExpenses([]);
     
     try {
-        if (scanMode === 'line-items') {
-            const result = await scanExpenses({ photoDataUri: imagePreview });
-            if (result.expenses.length === 0) {
-              toast({ title: 'No Expenses Found', description: 'The AI could not find any expenses in the image.' });
-            } else {
-                const otherCategory = categories.find(c => c.name === 'Other');
-                const newEditableExpenses: EditableExpense[] = result.expenses.map(exp => ({
+        const result = scanMode === 'line-items' 
+          ? await scanExpenses({ photoDataUri: imagePreview })
+          : await scanDocumentForExpenses({ photoDataUri: imagePreview });
+        
+        if (!result.expenses || result.expenses.length === 0) {
+          toast({ title: 'No Expenses Found', description: 'The AI could not find any expenses in the document.' });
+        } else {
+            const otherCategory = categories.find(c => c.name === 'Other');
+            const newEditableExpenses: EditableExpense[] = result.expenses.map(exp => {
+                const categoryExists = categories.some(c => c.name.toLowerCase() === (exp as any).category?.toLowerCase());
+                return {
                     title: exp.title,
                     amount: exp.amount,
-                    date: new Date().toISOString(),
-                    category: otherCategory?.name || 'Other',
-                    paymentMode: 'Other',
-                }));
-                setEditableExpenses(newEditableExpenses);
-            }
-        } else { // scanMode === 'receipt'
-            const result = await scanReceiptToCreateExpense({ photoDataUri: imagePreview });
-            
-            const categoryExists = categories.some(c => c.name.toLowerCase() === result.category.toLowerCase());
-
-            const expenseData: Partial<Expense> = {
-                title: result.vendor || 'Scanned Expense',
-                amount: result.amount,
-                date: result.date ? new Date(result.date).toISOString() : new Date().toISOString(),
-                category: categoryExists ? result.category : 'Other',
-                paymentMode: result.paymentMode,
-            };
-            setSingleExpense(expenseData);
+                    date: (exp as any).date ? new Date((exp as any).date).toISOString() : new Date().toISOString(),
+                    category: (exp as any).category && categoryExists ? (exp as any).category : (otherCategory?.name || 'Other'),
+                    paymentMode: (exp as any).paymentMode || 'Other',
+                }
+            });
+            setEditableExpenses(newEditableExpenses);
         }
     } catch (error) {
         console.error(error);
@@ -186,7 +172,6 @@ export default function ExpenseScanner() {
         setImagePreview(dataUri);
         stopCamera();
         setEditableExpenses([]);
-        setSingleExpense(null);
       }
     }
   };
@@ -194,7 +179,6 @@ export default function ExpenseScanner() {
   const resetImage = () => {
     setImagePreview(null);
     setEditableExpenses([]);
-    setSingleExpense(null);
     if(fileInputRef.current) {
         fileInputRef.current.value = '';
     }
@@ -227,10 +211,9 @@ export default function ExpenseScanner() {
       setEditableExpenses(editableExpenses.filter((_, i) => i !== index));
   };
   
-  const handleSaveScannedReceipt = () => {
-    toast({ title: 'Success', description: 'Expense added successfully.' });
-    router.push('/expenses');
-  };
+  const getAcceptFileType = () => {
+      return scanMode === 'document' ? "image/*,application/pdf" : "image/*";
+  }
 
   return (
     <div className="space-y-8">
@@ -238,15 +221,14 @@ export default function ExpenseScanner() {
       
       <Tabs value={scanMode} onValueChange={handleScanModeChange} className="w-full">
         <TabsList className="grid w-full grid-cols-2">
-            <TabsTrigger value="line-items">Scan Line Items</TabsTrigger>
-            <TabsTrigger value="receipt">Scan Full Receipt</TabsTrigger>
+            <TabsTrigger value="line-items">Scan Simple List</TabsTrigger>
+            <TabsTrigger value="document">Import from Document</TabsTrigger>
         </TabsList>
 
-        <TabsContent value="line-items" className="mt-6">
-           <div className="grid gap-8 md:grid-cols-1 lg:grid-cols-2">
+        <div className="grid gap-8 md:grid-cols-1 lg:grid-cols-2 mt-6">
             <Card className="lg:col-span-1">
               <CardHeader>
-                <CardTitle>1. Provide an Image</CardTitle>
+                <CardTitle>1. Provide a Document</CardTitle>
               </CardHeader>
               <CardContent className="space-y-6">
                 <Tabs value={activeTab} onValueChange={handleTabChange}>
@@ -254,7 +236,7 @@ export default function ExpenseScanner() {
                         <TabsTrigger value="upload" className="flex items-center gap-2">
                             <Upload className="h-4 w-4"/> Upload File
                         </TabsTrigger>
-                        <TabsTrigger value="camera" className="flex items-center gap-2">
+                        <TabsTrigger value="camera" className="flex items-center gap-2" disabled={scanMode === 'document'}>
                             <Camera className="h-4 w-4"/> Use Camera
                         </TabsTrigger>
                     </TabsList>
@@ -270,7 +252,9 @@ export default function ExpenseScanner() {
                             <div className="border-2 border-dashed border-muted-foreground/30 rounded-lg p-8 flex flex-col items-center justify-center text-center h-64">
                                 <ImageUp className="h-12 w-12 text-muted-foreground"/>
                                 <h3 className="mt-4 text-lg font-medium">Click to upload or drag and drop</h3>
-                                <p className="mt-1 text-sm text-muted-foreground">PNG, JPG, or other image formats</p>
+                                <p className="mt-1 text-sm text-muted-foreground">
+                                    {scanMode === 'document' ? 'Image or PDF file' : 'Image file (PNG, JPG, etc.)'}
+                                </p>
                                 <Button type="button" variant="outline" className="mt-4" onClick={() => fileInputRef.current?.click()}>
                                     Browse Files
                                 </Button>
@@ -278,7 +262,7 @@ export default function ExpenseScanner() {
                                     ref={fileInputRef} 
                                     type="file" 
                                     className="hidden" 
-                                    accept="image/*"
+                                    accept={getAcceptFileType()}
                                     onChange={handleFileChange}
                                 />
                             </div>
@@ -316,7 +300,7 @@ export default function ExpenseScanner() {
               <CardFooter>
                 <Button onClick={handleScanImage} disabled={!imagePreview || isLoading} className="w-full">
                   {isLoading ? <Loader2 className="mr-2 animate-spin" /> : null}
-                  Scan Image
+                  Scan Document
                 </Button>
               </CardFooter>
             </Card>
@@ -436,68 +420,6 @@ export default function ExpenseScanner() {
                 </CardFooter>
             </Card>
            </div>
-        </TabsContent>
-
-        <TabsContent value="receipt" className="mt-6">
-             <div className="grid gap-8 md:grid-cols-1 lg:grid-cols-2">
-                <Card className="lg:col-span-1">
-                  <CardHeader>
-                    <CardTitle>1. Provide a Receipt</CardTitle>
-                  </CardHeader>
-                  <CardContent className="space-y-6">
-                        {imagePreview ? (
-                            <div className="relative">
-                                <Image src={imagePreview} alt="Receipt preview" className="rounded-md max-h-80 w-auto mx-auto" width={400} height={600} />
-                                <Button variant="destructive" size="icon" className="absolute top-2 right-2" onClick={resetImage}>
-                                    <CircleX className="h-5 w-5" />
-                                </Button>
-                            </div>
-                        ) : (
-                            <div className="border-2 border-dashed border-muted-foreground/30 rounded-lg p-8 flex flex-col items-center justify-center text-center h-64">
-                                <ImageUp className="h-12 w-12 text-muted-foreground"/>
-                                <h3 className="mt-4 text-lg font-medium">Click to upload or drag and drop</h3>
-                                <p className="mt-1 text-sm text-muted-foreground">PNG, JPG, PDF, etc.</p>
-                                <Button type="button" variant="outline" className="mt-4" onClick={() => fileInputRef.current?.click()}>
-                                    Browse Files
-                                </Button>
-                                <Input 
-                                    ref={fileInputRef} 
-                                    type="file" 
-                                    className="hidden" 
-                                    accept="image/*,application/pdf"
-                                    onChange={handleFileChange}
-                                />
-                            </div>
-                        )}
-                  </CardContent>
-                  <CardFooter>
-                    <Button onClick={handleScanImage} disabled={!imagePreview || isLoading} className="w-full">
-                      {isLoading ? <Loader2 className="mr-2 animate-spin" /> : null}
-                      Scan Receipt
-                    </Button>
-                  </CardFooter>
-                </Card>
-
-                <Card className="lg:col-span-1">
-                  <CardHeader>
-                    <CardTitle>2. Review and Save</CardTitle>
-                  </CardHeader>
-                  <CardContent className="min-h-[350px]">
-                     {isLoading ? (
-                        <div className="flex items-center justify-center h-full">
-                            <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-                        </div>
-                    ) : singleExpense ? (
-                        <ExpenseForm expense={singleExpense as Expense} onSave={handleSaveScannedReceipt} />
-                    ) : (
-                        <div className="flex flex-col items-center justify-center h-full text-center p-4 border-2 border-dashed rounded-md">
-                            <p className="text-muted-foreground">Scanned receipt details will appear here.</p>
-                        </div>
-                    )}
-                  </CardContent>
-                </Card>
-             </div>
-        </TabsContent>
       </Tabs>
     </div>
   );

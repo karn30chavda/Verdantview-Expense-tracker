@@ -115,14 +115,20 @@ export default function DashboardPage() {
 
   return (
     <div className="flex flex-col gap-8">
-       <div className="flex items-center justify-between">
-        <h1 className="text-3xl font-bold">Dashboard</h1>
-        <div className="flex gap-2">
-            <Button asChild>
-                <Link href="/expenses/new"><PlusCircle/> New Expense</Link>
+       <div className="flex items-center justify-between gap-4">
+        <h1 className="text-3xl font-bold shrink-0">Dashboard</h1>
+        <div className="flex items-center gap-2">
+            <Button asChild size="sm" className="relative">
+                <Link href="/expenses/new">
+                    <PlusCircle className="h-4 w-4" />
+                    <span className="hidden sm:inline-block sm:ml-2">New Expense</span>
+                </Link>
             </Button>
-            <Button asChild variant="outline">
-                <Link href="/scan"><ScanLine/> Scan</Link>
+            <Button asChild variant="outline" size="sm" className="relative">
+                <Link href="/scan">
+                    <ScanLine className="h-4 w-4" />
+                    <span className="hidden sm:inline-block sm:ml-2">Scan</span>
+                </Link>
             </Button>
         </div>
       </div>
